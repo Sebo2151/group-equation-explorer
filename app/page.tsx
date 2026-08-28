@@ -92,6 +92,64 @@ function StaticExpression({ term }: { term: Term }) {
   );
 }
 
+/**
+ * The tokens of an expression, laid out on the shared column grid.
+ *
+ * Every line of the proof draws its expression through this, whether or not it
+ * is the line being worked on, so a letter sits at the same width on every
+ * line. Spacing that changed as soon as a line stopped being current — or as
+ * soon as an insertion law reserved room between the factors — read as the
+ * mathematics moving about, which it never does.
+ */
+function FactorRow({
+  layout,
+  candidates,
+  highlighted,
+}: {
+  layout: Layout;
+  candidates?: Set<number>;
+  highlighted?: Set<number>;
+}) {
+  return (
+    <>
+      {layout.tokens.map((token, index) => (
+        <span
+          aria-hidden="true"
+          className={[
+            'factor',
+            `is-${token.kind}`,
+            candidates?.has(index) ? 'is-candidate' : '',
+            highlighted?.has(index) ? 'is-active' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          key={index}
+          style={{ gridColumn: tokenColumn(index) }}
+          dangerouslySetInnerHTML={mathHtml(token.tex)}
+        />
+      ))}
+    </>
+  );
+}
+
+/** A settled line: the same grid as the current one, without any controls. */
+function StaticStage({ term }: { term: Term }) {
+  const layout = useMemo(() => layoutTerm(term), [term]);
+
+  return (
+    <span
+      className="expression-stage"
+      role="math"
+      aria-label={termSpeech(term)}
+      style={{ gridTemplateColumns: gridColumns(layout) }}
+    >
+      <span className="factor-row">
+        <FactorRow layout={layout} />
+      </span>
+    </span>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* The interactive line                                                */
 /* ------------------------------------------------------------------ */
@@ -174,25 +232,10 @@ function InteractiveExpression({
       className="expression-stage"
       onKeyDown={onKeyDown}
       ref={stageRef}
-      style={{ gridTemplateColumns: gridColumns(layout, rule.attachesToGaps) }}
+      style={{ gridTemplateColumns: gridColumns(layout) }}
     >
       <span className="factor-row" role="math" aria-label={termSpeech(term)}>
-        {layout.tokens.map((token, index) => (
-          <span
-            aria-hidden="true"
-            className={[
-              'factor',
-              `is-${token.kind}`,
-              candidates.has(index) ? 'is-candidate' : '',
-              highlighted.has(index) ? 'is-active' : '',
-            ]
-              .filter(Boolean)
-              .join(' ')}
-            key={index}
-            style={{ gridColumn: tokenColumn(index) }}
-            dangerouslySetInnerHTML={mathHtml(token.tex)}
-          />
-        ))}
+        <FactorRow layout={layout} candidates={candidates} highlighted={highlighted} />
       </span>
 
       {placements.map(({ target, columns, ordinal, layer }) => (
@@ -223,11 +266,16 @@ function InteractiveExpression({
   );
 }
 
-/** Insertion columns need real width only while an insertion rule is selected. */
-function gridColumns(layout: Layout, forInsertion: boolean): string {
+/**
+ * The insertion columns keep the same width on every line and under every law.
+ * They are narrower than the insertion bracket, which is centred and allowed to
+ * overhang into the padding either side of its column; reserving the bracket's
+ * full width instead would push the factors apart for no reason.
+ */
+function gridColumns(layout: Layout): string {
   const total = columnCount(layout);
   return Array.from({ length: total }, (_, index) =>
-    index % 2 === 0 ? (forInsertion ? '18px' : '0') : 'auto',
+    index % 2 === 0 ? 'var(--insert-column)' : 'auto',
   ).join(' ');
 }
 
@@ -282,7 +330,7 @@ function ProofLineView({
 
   return (
     <>
-      <div className="expression-slot">{interactive ?? <StaticExpression term={term} />}</div>
+      <div className="expression-slot">{interactive ?? <StaticStage term={term} />}</div>
       {reason && (
         <div className="reason-slot">
           <button
@@ -750,31 +798,34 @@ export default function Home() {
                   } for ${rule.name}.`}
             </p>
 
-            {complete ? (
-              <div className="success-note" ref={successRef} tabIndex={-1}>
-                <span className="success-mark" aria-hidden="true">
-                  ✓
-                </span>
-                <div>
-                  <strong>Expression simplified</strong>
-                  <span>You reached the target with a justified chain.</span>
-                </div>
-              </div>
-            ) : (
-              <div className="selection-note">
-                <span className="selection-swatch" aria-hidden="true" />
-                <div>
-                  <strong>{rule.name}</strong>
-                  <span>
-                    {targets.length
-                      ? `${rule.description} ${targets.length} ${
-                          targets.length === 1 ? 'place' : 'places'
-                        } marked ${rule.attachesToGaps ? 'between the factors' : 'below the expression'}.`
-                      : `${rule.description} It is still a true law — there is just nowhere to use it here. Try another law.`}
+            {/* Carries the ruling on below the last written line. */}
+            <div className="paper-rest">
+              {complete ? (
+                <div className="success-note" ref={successRef} tabIndex={-1}>
+                  <span className="success-mark" aria-hidden="true">
+                    ✓
                   </span>
+                  <div>
+                    <strong>Expression simplified</strong>
+                    <span>You reached the target with a justified chain.</span>
+                  </div>
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="selection-note">
+                  <span className="selection-swatch" aria-hidden="true" />
+                  <div>
+                    <strong>{rule.name}</strong>
+                    <span>
+                      {targets.length
+                        ? `${rule.description} ${targets.length} ${
+                            targets.length === 1 ? 'place' : 'places'
+                          } marked ${rule.attachesToGaps ? 'between the factors' : 'below the expression'}.`
+                        : `${rule.description} It is still a true law — there is just nowhere to use it here. Try another law.`}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </section>
 

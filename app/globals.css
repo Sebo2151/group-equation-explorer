@@ -92,18 +92,53 @@ h2 { margin-bottom: 0; font-size: 1.05rem; letter-spacing: -0.015em; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 17px 19px; border-bottom: 1px solid var(--line); }
 .reason-toggle { min-height: 34px; padding: 0 10px; color: var(--muted); font-size: 0.75rem; }
 
+/* Ruled paper.
+   The rules are drawn per line rather than as one repeating background on the
+   sheet: a line grows as tall as its brackets need, so no fixed background
+   pitch can stay under the writing. Each line carries its own rule, and
+   `.paper-tail` continues the ruling at the same pitch below the last one.
+   Everything is expressed in the pitch below, so the ruling follows the text at
+   any browser zoom or text size. */
 .proof-paper {
+  --paper-pad-x: 34px;
+  --paper-pad-top: 32px;
+  --paper-pad-bottom: 32px;
+  --rule-pitch: 74px;
+  --rule-ink: rgba(98, 126, 167, 0.14);
+  display: flex;
+  flex-direction: column;
   min-height: 450px;
-  padding: 32px 34px;
+  padding: var(--paper-pad-top) var(--paper-pad-x) var(--paper-pad-bottom);
   background-color: #fffefa;
-  background-image: linear-gradient(rgba(98, 126, 167, 0.075) 1px, transparent 1px);
-  background-size: 100% 33px;
+}
+/* Everything below the last written line. Its ruling starts at its own top —
+   the bottom of the last line — so the first rule below the writing falls one
+   pitch under the last one, and the sheet keeps a single rhythm. */
+.paper-rest {
+  flex: 1 1 auto;
+  min-height: calc(2 * var(--rule-pitch));
+  margin: 0 calc(-1 * var(--paper-pad-x)) calc(-1 * var(--paper-pad-bottom));
+  padding: 0 var(--paper-pad-x) var(--paper-pad-bottom);
+  background-image: linear-gradient(
+    to bottom,
+    transparent calc(var(--rule-pitch) - 1px),
+    var(--rule-ink) calc(var(--rule-pitch) - 1px)
+  );
+  background-size: 100% var(--rule-pitch);
 }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; border: 0; padding: 0; overflow: hidden; white-space: nowrap; clip-path: inset(50%); }
 
-.proof-lines { display: grid; gap: 18px; }
-.proof-line:focus-visible { outline: 2px solid var(--blue); outline-offset: 4px; border-radius: 8px; }
-.proof-line { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; min-height: 56px; }
+/* The rules run the full width of the sheet, so the lines reach past the
+   sheet's own padding and put it back on themselves. */
+.proof-lines { display: grid; margin-inline: calc(-1 * var(--paper-pad-x)); padding-inline: var(--paper-pad-x); }
+.proof-line:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; border-radius: 8px; }
+.proof-line {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: var(--rule-pitch);
+  border-bottom: 1px solid var(--rule-ink);
+}
 .relation { color: var(--muted); font-family: Georgia, serif; font-size: 1.85rem; text-align: center; }
 .expression-slot { min-width: 0; overflow-x: auto; overflow-y: visible; padding: 10px 8px 4px; }
 .static-math, .expression-stage { font-size: clamp(1.42rem, 3vw, 2rem); }
@@ -111,7 +146,7 @@ h2 { margin-bottom: 0; font-size: 1.05rem; letter-spacing: -0.015em; }
 
 /* The factors and every candidate bracket share one grid, so a bracket can span
    exactly the columns of the factors it applies to. */
-.expression-stage { display: inline-grid; justify-content: start; align-items: end; row-gap: 3px; white-space: nowrap; }
+.expression-stage { --insert-column: 8px; display: inline-grid; justify-content: start; align-items: end; row-gap: 3px; white-space: nowrap; }
 .factor-row { display: contents; }
 .factor {
   display: inline-grid;
@@ -206,7 +241,7 @@ h2 { margin-bottom: 0; font-size: 1.05rem; letter-spacing: -0.015em; }
 /* Insertion points sit in their own zero-width columns between the factors, so
    a rule that inserts has somewhere to attach without disturbing the spacing
    of the expression. */
-.target.is-insertion { justify-self: center; }
+.target.is-insertion { justify-self: center; margin: 0; }
 .target.is-insertion .target-bracket {
   width: 14px;
   height: 14px;
@@ -327,7 +362,13 @@ footer p { margin: 0; }
   .proof-card, .rules-card { width: 100%; }
   .proof-card { min-height: auto; }
   /* Reserve room for the sticky dock so it never sits over the active line. */
-  .proof-paper { min-height: 390px; padding: 25px 15px calc(var(--dock-height) + 20px); }
+  .proof-paper {
+    --paper-pad-x: 15px;
+    --paper-pad-top: 25px;
+    --paper-pad-bottom: calc(var(--dock-height) + 20px);
+    --rule-pitch: 70px;
+    min-height: 390px;
+  }
   .proof-line, .success-note { scroll-margin-bottom: calc(var(--dock-height) + 20px); scroll-margin-top: 12px; }
   .rules-card { position: sticky; bottom: 4px; z-index: 8; padding: 8px; box-shadow: 0 12px 50px rgba(36, 29, 18, 0.22); }
   .rules-heading, .phase-note, .family-label { display: none; }
@@ -349,7 +390,7 @@ footer p { margin: 0; }
   .challenge-banner { grid-template-columns: auto 1fr; gap: 11px; padding: 12px; }
   .status-pill { grid-column: 2; width: fit-content; }
   .section-heading { padding: 13px; }
-  .proof-line { grid-template-columns: 22px minmax(0, 1fr); min-height: 52px; }
+  .proof-line { grid-template-columns: 22px minmax(0, 1fr); }
   .reason-detail { max-width: none; }
   .proof-line .reason { grid-column: 2; justify-self: start; margin-left: 8px; }
   .expression-slot { padding-inline: 5px; }
