@@ -364,6 +364,7 @@ export default function Home() {
                   type="button"
                   aria-pressed={active}
                   onClick={() => setSelectedRule(entry.id)}
+                  aria-label={`${entry.name}, ${count} ${count === 1 ? 'place' : 'places'}`}
                 >
                   <span className="rule-topline">
                     <span className="rule-name">{entry.name}</span>

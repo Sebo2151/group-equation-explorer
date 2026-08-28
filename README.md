@@ -69,10 +69,17 @@ npm test
 npm run lint
 npx tsc --noEmit --incremental false
 npm run build
+npm run test:browser
 ```
 
-There is no committed browser regression suite yet, and no real-device trial has
-been run; both remain open. See the audit record for the current gaps.
+`npm run test:browser` runs the Playwright suite in `tests/browser`, against a
+desktop viewport and a genuine 390px phone profile. It asserts behavioural
+invariants — focus destinations, dock-versus-active-line geometry, one control
+per candidate, no TeX in accessible names — rather than appearance, so it should
+survive a redesign. First run needs `npx playwright install chromium`.
+
+No real-device trial has been run yet; screen reader, zoom, and enlarged-text
+passes also remain open. See the audit record for the current gaps.
 
 ## Project shape
 
@@ -82,6 +89,7 @@ been run; both remain open. See the audit record for the current gaps.
 - `app/page.tsx` — React interaction and typesetting
 - `app/globals.css` — visual system and responsive layout
 - `tests/core.test.ts`, `tests/proof.test.ts` — engine and proof-history tests
+- `tests/browser/invariants.spec.ts` — Playwright interaction invariants
 
 The mathematical interaction runs in the browser and uses no database or backend
 solver. The current React/Vinext/Sites scaffold still requires a build and web
