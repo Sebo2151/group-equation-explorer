@@ -1,240 +1,268 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
-import { expressionTex, START, type Factor } from '../app/core.ts';
+import { test } from 'node:test';
+
+import { parseTerm } from '../app/parse.ts';
 import {
   applyRule,
   canRedo,
   canUndo,
   createProof,
   currentLine,
-  factorsEqual,
   isComplete,
+  MAX_STEPS,
   redo,
+  replayableSteps,
+  replayProof,
   restart,
+  ruleAllowed,
   stepCount,
   undo,
+  verifyProof,
   visibleLines,
+  type ProofSetup,
   type ProofState,
 } from '../app/proof.ts';
+import type { RuleId } from '../app/rules.ts';
+import { termSource, type Target } from '../app/term.ts';
 
-const at = (start: number, end = start) => ({ start, end });
-const GOAL: Factor[] = [{ base: 'b' }];
-const tex = (state: ProofState) => expressionTex(currentLine(state).factors);
+const OPENING: ProofSetup = {
+  challenge: 'cancel-pairs',
+  start: parseTerm('a a^-1 b c^-1 c'),
+  goal: parseTerm('b'),
+  ruleset: ['cancel-inverse', 'remove-identity'],
+};
 
-/** The canonical four-step solution, cancelling the left pair first. */
-function solve(state: ProofState): ProofState {
-  return [
-    ['inverse', at(0, 1)],
-    ['identity', at(0)],
-    ['inverse', at(1, 2)],
-    ['identity', at(1)],
-  ].reduce<ProofState>(
-    (acc, [rule, target]) => applyRule(acc, rule as 'inverse' | 'identity', target as ReturnType<typeof at>),
-    state,
-  );
+function source(state: ProofState): string {
+  return termSource(currentLine(state).term);
 }
 
-test('a new proof starts on the opening line with nothing to undo or redo', () => {
-  const state = createProof(START);
-  assert.equal(stepCount(state), 0);
-  assert.equal(canUndo(state), false);
-  assert.equal(canRedo(state), false);
-  assert.equal(visibleLines(state).length, 1);
-  assert.equal(currentLine(state).step, undefined);
-  assert.equal(isComplete(state, GOAL), false);
+function chain(state: ProofState): string[] {
+  return visibleLines(state).map((line) => termSource(line.term));
+}
+
+const left: Target = { path: [], start: 0, end: 1 };
+
+/* Setup ------------------------------------------------------------------ */
+
+test('a new proof has one line and nothing to undo', () => {
+  const proof = createProof(OPENING);
+  assert.equal(stepCount(proof), 0);
+  assert.equal(canUndo(proof), false);
+  assert.equal(canRedo(proof), false);
+  assert.equal(isComplete(proof), false);
+  assert.deepEqual(chain(proof), ['a a^-1 b c^-1 c']);
 });
 
-test('creating a proof copies the starting factors', () => {
-  const start: Factor[] = [{ base: 'a' }];
-  const state = createProof(start);
-  state.lines[0].factors[0].base = 'z';
-  assert.equal(start[0].base, 'a');
+test('the ruleset is recorded, de-duplicated, and validated', () => {
+  const proof = createProof({ ...OPENING, ruleset: ['cancel-inverse', 'cancel-inverse'] });
+  assert.deepEqual(proof.ruleset, ['cancel-inverse']);
+  assert.throws(() => createProof({ ...OPENING, ruleset: [] }), /at least one/);
+  assert.throws(() => createProof({ ...OPENING, ruleset: ['nope' as RuleId] }), /Unknown rule id/);
+  assert.throws(() => createProof({ ...OPENING, ruleset: 'all' as never }), /list of rule ids/);
 });
 
-test('applying a rule appends one line and advances the cursor', () => {
-  const state = applyRule(createProof(START), 'inverse', at(0, 1));
-  assert.equal(stepCount(state), 1);
-  assert.equal(visibleLines(state).length, 2);
-  assert.equal(tex(state), 'ebc^{-1}c');
+test('a rule outside the challenge ruleset is refused even where it would apply', () => {
+  const proof = createProof({ ...OPENING, ruleset: ['remove-identity'] });
+  assert.equal(ruleAllowed(proof, 'cancel-inverse'), false);
+  assert.throws(() => applyRule(proof, 'cancel-inverse', left), /not available in this challenge/);
 });
 
-test('a committed step records the rule and target, not only the label', () => {
-  const step = currentLine(applyRule(createProof(START), 'inverse', at(3, 4))).step;
-  assert.deepEqual(step, {
-    rule: 'inverse',
-    target: at(3, 4),
-    reason: 'Inverse law',
-    detail: 'c inverse times c is the identity',
-  });
+/* Building a chain ------------------------------------------------------- */
+
+test('the opening challenge completes in four steps, either order first', () => {
+  const rightPair: Target = { path: [], start: 3, end: 4 };
+
+  let proof = createProof(OPENING);
+  proof = applyRule(proof, 'cancel-inverse', left);
+  assert.equal(source(proof), 'e b c^-1 c');
+  // The second pair has shifted left by one: targets are indices into the
+  // current line, never into the line the learner first saw.
+  proof = applyRule(proof, 'cancel-inverse', { path: [], start: 2, end: 3 });
+  assert.equal(source(proof), 'e b e');
+  proof = applyRule(proof, 'remove-identity', { path: [], start: 0, end: 0 });
+  proof = applyRule(proof, 'remove-identity', { path: [], start: 1, end: 1 });
+  assert.equal(source(proof), 'b');
+  assert.ok(isComplete(proof));
+  assert.equal(stepCount(proof), 4);
+
+  let other = createProof(OPENING);
+  other = applyRule(other, 'cancel-inverse', rightPair);
+  assert.equal(source(other), 'a a^-1 b e');
+  other = applyRule(other, 'cancel-inverse', left);
+  other = applyRule(other, 'remove-identity', { path: [], start: 0, end: 0 });
+  other = applyRule(other, 'remove-identity', { path: [], start: 1, end: 1 });
+  assert.ok(isComplete(other));
+  assert.equal(stepCount(other), 4);
 });
 
-test('step reasons and details are plain words, never TeX source', () => {
-  // These strings are both displayed and read aloud, so `c^{-1}` would be
-  // announced as "c caret left brace minus one right brace".
-  const solved = solve(createProof(START));
-  for (const { step } of visibleLines(solved).slice(1)) {
-    assert.doesNotMatch(step!.reason, /[\\^{}]/, step!.reason);
-    assert.doesNotMatch(step!.detail, /[\\^{}]/, step!.detail);
-  }
+test('every intermediate line is recorded with its rule, target and reason', () => {
+  const proof = applyRule(createProof(OPENING), 'cancel-inverse', left);
+  const [, second] = visibleLines(proof);
+  assert.deepEqual(second.step?.rule, 'cancel-inverse');
+  assert.deepEqual(second.step?.target, left);
+  assert.equal(second.step?.reason, 'Inverse law');
+  assert.match(second.step?.detail ?? '', /identity/);
+  assert.deepEqual(chain(proof), ['a a^-1 b c^-1 c', 'e b c^-1 c']);
+});
+
+test('an instantiated term is recorded on the step', () => {
+  const proof = applyRule(
+    createProof({
+      challenge: 'free',
+      start: parseTerm('b'),
+      goal: null,
+      ruleset: ['insert-inverse-pair'],
+    }),
+    'insert-inverse-pair',
+    { path: [], start: 0, end: -1 },
+    { term: parseTerm('a'), inverseFirst: true },
+  );
+  assert.equal(source(proof), 'a^-1 a b');
+  assert.equal(termSource(currentLine(proof).step!.argument!.term), 'a');
+  assert.equal(currentLine(proof).step!.argument!.inverseFirst, true);
 });
 
 test('applying a rule does not mutate the previous state', () => {
-  const before = createProof(START);
-  const snapshot = JSON.stringify(before);
-  applyRule(before, 'inverse', at(0, 1));
-  assert.equal(JSON.stringify(before), snapshot);
+  const proof = createProof(OPENING);
+  const snapshot = JSON.parse(JSON.stringify(proof));
+  applyRule(proof, 'cancel-inverse', left);
+  assert.deepEqual(JSON.parse(JSON.stringify(proof)), snapshot);
 });
 
-test('an illegal move is refused and cannot damage the proof', () => {
-  const state = createProof(START);
-  assert.throws(() => applyRule(state, 'identity', at(0)), /not valid/);
-  assert.equal(stepCount(state), 0);
-  assert.equal(tex(state), 'aa^{-1}bc^{-1}c');
+/* Undo, redo, restart ---------------------------------------------------- */
+
+test('undo and redo move the cursor without losing lines', () => {
+  let proof = applyRule(createProof(OPENING), 'cancel-inverse', left);
+  proof = applyRule(proof, 'remove-identity', { path: [], start: 0, end: 0 });
+  assert.equal(source(proof), 'b c^-1 c');
+
+  proof = undo(proof);
+  assert.equal(source(proof), 'e b c^-1 c');
+  assert.ok(canRedo(proof));
+  assert.deepEqual(chain(proof), ['a a^-1 b c^-1 c', 'e b c^-1 c']);
+
+  proof = redo(proof);
+  assert.equal(source(proof), 'b c^-1 c');
+  assert.equal(canRedo(proof), false);
 });
 
-test('the example completes in four steps and is recognized as complete', () => {
-  const state = solve(createProof(START));
-  assert.equal(stepCount(state), 4);
-  assert.equal(tex(state), 'b');
-  assert.ok(isComplete(state, GOAL));
+test('undo at the opening and redo at the tip do nothing', () => {
+  const proof = createProof(OPENING);
+  assert.equal(undo(proof), proof);
+  assert.equal(redo(proof), proof);
 });
 
-test('the right-hand pair may be cancelled first, also in four steps', () => {
-  let state = createProof(START);
-  state = applyRule(state, 'inverse', at(3, 4));
-  assert.equal(tex(state), 'aa^{-1}be');
-  state = applyRule(state, 'identity', at(3));
-  assert.equal(tex(state), 'aa^{-1}b');
-  state = applyRule(state, 'inverse', at(0, 1));
-  assert.equal(tex(state), 'eb');
-  state = applyRule(state, 'identity', at(0));
+test('a different move after undo discards the abandoned future', () => {
+  let proof = applyRule(createProof(OPENING), 'cancel-inverse', left);
+  proof = undo(proof);
+  proof = applyRule(proof, 'cancel-inverse', { path: [], start: 3, end: 4 });
 
-  assert.equal(stepCount(state), 4);
-  assert.ok(isComplete(state, GOAL));
+  assert.equal(source(proof), 'a a^-1 b e');
+  assert.equal(canRedo(proof), false);
+  proof = redo(proof);
+  assert.equal(source(proof), 'a a^-1 b e', 'the discarded branch came back');
 });
 
-test('undo walks back one step at a time and re-exposes earlier lines', () => {
-  const solved = solve(createProof(START));
-  const once = undo(solved);
+test('undo works across completion', () => {
+  let proof = createProof(OPENING);
+  proof = applyRule(proof, 'cancel-inverse', left);
+  proof = applyRule(proof, 'cancel-inverse', { path: [], start: 2, end: 3 });
+  proof = applyRule(proof, 'remove-identity', { path: [], start: 0, end: 0 });
+  proof = applyRule(proof, 'remove-identity', { path: [], start: 1, end: 1 });
+  assert.ok(isComplete(proof));
 
-  assert.equal(stepCount(once), 3);
-  assert.equal(tex(once), 'be');
-  assert.equal(visibleLines(once).length, 4);
-  assert.ok(canRedo(once));
-  assert.equal(isComplete(once, GOAL), false);
+  proof = undo(proof);
+  assert.equal(isComplete(proof), false);
+  assert.equal(source(proof), 'b e');
+  assert.ok(isComplete(redo(proof)));
 });
 
-test('undo past the opening line is a no-op', () => {
-  const state = undo(undo(createProof(START)));
-  assert.equal(stepCount(state), 0);
-  assert.equal(canUndo(state), false);
+test('restart returns to the opening line and keeps the ruleset', () => {
+  let proof = applyRule(createProof(OPENING), 'cancel-inverse', left);
+  proof = restart(proof);
+  assert.equal(stepCount(proof), 0);
+  assert.equal(canUndo(proof), false);
+  assert.equal(canRedo(proof), false);
+  assert.deepEqual(chain(proof), ['a a^-1 b c^-1 c']);
+  assert.deepEqual(proof.ruleset, OPENING.ruleset);
+  assert.equal(proof.challenge, 'cancel-pairs');
 });
 
-test('redo past the newest line is a no-op', () => {
-  const state = applyRule(createProof(START), 'inverse', at(0, 1));
-  assert.equal(canRedo(state), false);
-  assert.equal(stepCount(redo(state)), 1);
+/* Completion ------------------------------------------------------------- */
+
+test('completion compares terms, not rendered notation', () => {
+  const toIdentity = createProof({
+    challenge: 'free',
+    start: parseTerm('a a^-1'),
+    goal: parseTerm('e'),
+    ruleset: ['cancel-inverse'],
+  });
+  assert.equal(isComplete(toIdentity), false);
+  assert.ok(isComplete(applyRule(toIdentity, 'cancel-inverse', left)));
 });
 
-test('undo and redo restore the same proof, including completion', () => {
-  const solved = solve(createProof(START));
-  const roundTrip = redo(redo(undo(undo(solved))));
-
-  assert.equal(stepCount(roundTrip), stepCount(solved));
-  assert.deepEqual(roundTrip.lines, solved.lines);
-  assert.ok(isComplete(roundTrip, GOAL));
+test('a proof with no goal is never complete', () => {
+  const free = createProof({
+    challenge: 'free',
+    start: parseTerm('a a^-1'),
+    goal: null,
+    ruleset: ['cancel-inverse'],
+  });
+  assert.equal(isComplete(free), false);
+  assert.equal(isComplete(applyRule(free, 'cancel-inverse', left)), false);
 });
 
-test('a different move after undo discards the redo branch permanently', () => {
-  const solved = solve(createProof(START));
+/* Replay ----------------------------------------------------------------- */
 
-  // Step back to `bc^{-1}c`, then take the identity-free route instead.
-  const rewound = undo(undo(solved));
-  assert.equal(tex(rewound), 'bc^{-1}c');
-  assert.ok(canRedo(rewound));
+test('a finished proof replays from its recorded steps alone', () => {
+  let proof = createProof(OPENING);
+  proof = applyRule(proof, 'cancel-inverse', left);
+  proof = applyRule(proof, 'cancel-inverse', { path: [], start: 2, end: 3 });
+  proof = applyRule(proof, 'remove-identity', { path: [], start: 0, end: 0 });
+  proof = applyRule(proof, 'remove-identity', { path: [], start: 1, end: 1 });
 
-  const branched = applyRule(rewound, 'inverse', at(1, 2));
-  assert.equal(canRedo(branched), false, 'the abandoned future must not be reachable');
-  assert.equal(visibleLines(branched).length, branched.lines.length);
-
-  // Pressing Redo repeatedly must not resurrect the discarded lines.
-  const pressed = redo(redo(redo(branched)));
-  assert.equal(stepCount(pressed), stepCount(branched));
-  assert.equal(tex(pressed), 'be');
+  const replayed = verifyProof(proof);
+  assert.deepEqual(chain(replayed), chain(proof));
+  assert.ok(isComplete(replayed));
 });
 
-test('branching from the opening line discards every later line', () => {
-  const solved = solve(createProof(START));
-  const rewound = undo(undo(undo(undo(solved))));
-  assert.equal(stepCount(rewound), 0);
-
-  const branched = applyRule(rewound, 'inverse', at(3, 4));
-  assert.equal(branched.lines.length, 2);
-  assert.equal(canRedo(branched), false);
-  assert.equal(tex(branched), 'aa^{-1}be');
+test('replay checks each step and names the one that fails', () => {
+  assert.throws(
+    () =>
+      replayProof(OPENING, [
+        { rule: 'cancel-inverse', target: left },
+        { rule: 'cancel-inverse', target: { path: [], start: 0, end: 1 } },
+      ]),
+    /Step 2 \(cancel-inverse\) does not check out/,
+  );
 });
 
-test('restart returns to the opening line and drops all history', () => {
-  const state = restart(solve(createProof(START)));
-  assert.equal(stepCount(state), 0);
-  assert.equal(state.lines.length, 1);
-  assert.equal(canUndo(state), false);
-  assert.equal(canRedo(state), false);
-  assert.equal(tex(state), 'aa^{-1}bc^{-1}c');
+test('replay refuses a step using a rule outside the recorded ruleset', () => {
+  assert.throws(
+    () =>
+      replayProof({ ...OPENING, ruleset: ['remove-identity'] }, [
+        { rule: 'cancel-inverse', target: left },
+      ]),
+    /Step 1 .* not available/,
+  );
 });
 
-test('restart after undo still clears the redo branch', () => {
-  const state = restart(undo(solve(createProof(START))));
-  assert.equal(state.lines.length, 1);
-  assert.equal(canRedo(state), false);
+test('replay refuses an unknown rule id and a malformed step list', () => {
+  assert.throws(
+    () => replayProof(OPENING, [{ rule: 'teleport' as RuleId, target: left }]),
+    /unknown rule id/,
+  );
+  assert.throws(() => replayProof(OPENING, 'steps' as never), /must be a list/);
 });
 
-test('completion compares terms, not rendered TeX', () => {
-  // The empty product and an explicit identity both render as `e`.
-  const empty = createProof([]);
-  const identity = createProof([{ base: 'e', identity: true }]);
-
-  assert.equal(expressionTex(currentLine(empty).factors), 'e');
-  assert.equal(expressionTex(currentLine(identity).factors), 'e');
-
-  assert.ok(isComplete(empty, []));
-  assert.equal(isComplete(empty, [{ base: 'e', identity: true }]), false);
-  assert.ok(isComplete(identity, [{ base: 'e', identity: true }]));
-  assert.equal(isComplete(identity, []), false);
+test('replayable steps carry only what a verifier needs', () => {
+  const proof = applyRule(createProof(OPENING), 'cancel-inverse', left);
+  assert.deepEqual(replayableSteps(proof), [{ rule: 'cancel-inverse', target: left }]);
 });
 
-test('factorsEqual distinguishes order, inverses and the identity', () => {
-  assert.ok(factorsEqual([{ base: 'a' }, { base: 'b' }], [{ base: 'a' }, { base: 'b' }]));
-  assert.equal(factorsEqual([{ base: 'a' }, { base: 'b' }], [{ base: 'b' }, { base: 'a' }]), false);
-  assert.equal(factorsEqual([{ base: 'a' }], [{ base: 'a', inverse: true }]), false);
-  assert.equal(factorsEqual([{ base: 'a' }], [{ base: 'a' }, { base: 'b' }]), false);
-  assert.ok(factorsEqual([{ base: 'a', inverse: false }], [{ base: 'a' }]));
-});
-
-test('every visible line after the first carries the step that justified it', () => {
-  const solved = solve(createProof(START));
-  const [opening, ...derived] = visibleLines(solved);
-
-  assert.equal(opening.step, undefined);
-  assert.equal(derived.length, 4);
-  for (const line of derived) {
-    assert.ok(line.step, 'a derived line must record its justification');
-    assert.ok(line.step && ['inverse', 'identity'].includes(line.step.rule));
-  }
-});
-
-test('the recorded steps replay to the same expressions from the opening line', () => {
-  // A stored label is not a certificate; the rule and target must reproduce the
-  // line independently. This is the shape the Phase 2 replay check needs.
-  const solved = solve(createProof(START));
-  let replayed = createProof(currentLine(createProof(START)).factors);
-
-  for (const line of visibleLines(solved).slice(1)) {
-    replayed = applyRule(replayed, line.step!.rule, line.step!.target);
-  }
-
-  assert.deepEqual(
-    visibleLines(replayed).map((line) => expressionTex(line.factors)),
-    visibleLines(solved).map((line) => expressionTex(line.factors)),
+test('the step limit is enforced', () => {
+  assert.throws(
+    () => replayProof(OPENING, Array.from({ length: MAX_STEPS + 1 }, () => ({ rule: 'cancel-inverse' as RuleId, target: left }))),
+    /may not exceed/,
   );
 });

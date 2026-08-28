@@ -5,12 +5,20 @@ Snapshot date: 2026-08-27. Implementation baseline:
 This handoff and the development plan were added afterward. Always check the
 current working tree before assuming that this snapshot is still current.
 
-> **Superseded in part.** An audit pass against this document was completed on
-> 2026-08-27 and its confirmed defects were fixed. See
-> [audit-2026-08-27.md](audit-2026-08-27.md) for what was reproduced, what was
-> changed, and what remains open. The "What exists" and "Concrete review
-> priorities" sections below describe the code *before* that pass; several
-> items in them are now resolved. Read the audit record alongside this file.
+> **Largely superseded.** An audit pass against this document was completed on
+> 2026-08-27 and its confirmed defects were fixed; see
+> [audit-2026-08-27.md](audit-2026-08-27.md). Phase 2 was then implemented, which
+> replaced the flat `Factor[]` model this document describes with a recursive
+> term model, added a parser, powers, insertion and reverse rules, challenges
+> with per-challenge rulesets, free exploration, and export/import; see
+> [phase-2-2026-08-27.md](phase-2-2026-08-27.md).
+>
+> Everything in "What exists" below is now historical: `app/core.ts` no longer
+> exists. The "Concrete review priorities" section is still useful as a list of
+> *questions worth asking*, but several of its specific items are resolved and
+> its file references are stale. Read the two later records first, and treat
+> this file as the origin of the review's standing concerns rather than as a
+> description of the code.
 
 ## Read first
 
@@ -19,9 +27,12 @@ current working tree before assuming that this snapshot is still current.
 2. [README](../README.md): commands and entry points.
 3. [Audit record](audit-2026-08-27.md): what the first audit reproduced, fixed,
    and left open.
-4. `app/core.ts`, `app/proof.ts`, `app/page.tsx`, `app/globals.css`, and the
-   suites in `tests/`.
-5. `package.json`, `tsconfig.json`, `vite.config.ts`, and `app/layout.tsx` when
+4. [Phase 2 record](phase-2-2026-08-27.md): the current implementation, the
+   decisions taken where the plan left a choice, and what remains unverified.
+5. `app/term.ts`, `app/parse.ts`, `app/rules.ts`, `app/challenges.ts`,
+   `app/proof.ts`, `app/serialize.ts`, `app/render.ts`, `app/page.tsx`,
+   `app/globals.css`, and the suites in `tests/`.
+6. `package.json`, `tsconfig.json`, `vite.config.ts`, and `app/layout.tsx` when
    reviewing tooling, portability, rendering, or hosting.
 
 The task is an audit of an early prototype, not a request to implement the whole
@@ -29,7 +40,10 @@ roadmap. Distinguish current defects from missing planned features and from
 architecture recommendations. A review request alone does not authorize source
 changes, dependency upgrades, server termination, commits, or publication.
 
-## What exists
+## What existed at Phase 1 (historical)
+
+This section describes the code as it was before the Phase 2 work. It is kept
+for the reasoning it records, not as a current description.
 
 - One hardcoded expression: `a a^-1 b c^-1 c`, with the target `b`.
 - An ordered `Factor[]` representation; each factor has a string base and
@@ -110,20 +124,15 @@ Record exact locations, reproduction steps, impact, and confidence for findings.
 
 ## Validation evidence and limits
 
-On 2026-08-27, `npm test` was rerun: all six existing tests passed. They cover
-opening candidates, overlapping candidates, nonmutating cancellation, identity
-matches, one four-step proof, and one invalid-target rejection.
+Superseded. For the current evidence — 126 Node tests, a clean typecheck and
+lint, and two browser suites across a desktop viewport and a genuine 390px phone
+profile — and for the two things that could **not** be verified on this machine
+(the production build, blocked by a Dropbox file lock on `dist/`, and any git
+operation, blocked by a `.git` ownership mismatch), see the
+[Phase 2 record](phase-2-2026-08-27.md).
 
-On 2026-08-26, lint and a production build completed. Ad hoc in-app browser
-interactions completed the example, checked undo/redo and reason hiding, and
-reported no browser errors during those checks. No reusable browser test suite
-was committed. No fresh build or browser pass was run for this documentation change.
-
-Important limitation: a requested 390x844 browser override actually reported
-`innerWidth=325` and `innerHeight=703`, with document client width 312. The narrow
-layout was checked for overflow and initial dock overlap at those observed
-dimensions, not at a verified 390px CSS viewport. A complete true-desktop,
-390px-phone, landscape, and real-device regression pass is still needed.
+The original Phase 1 evidence and its measurement caveat are preserved in the
+[audit record](audit-2026-08-27.md).
 
 Useful commands (Node requirement is in `package.json`):
 
@@ -132,11 +141,11 @@ npm test
 npm run lint
 npx tsc --noEmit --incremental false
 npm run build
+npm run test:browser
 ```
 
-The TypeScript command is a suggested independent diagnostic, not a recorded
-passing check. Coordinate a build if the development server is in use: Windows
-file locks and build/dev cache interference were encountered previously.
+Coordinate a build if the development server is in use: Windows file locks and
+build/dev cache interference were encountered previously.
 
 ## Local preview and operational context
 
@@ -179,11 +188,13 @@ the handoff, repository, or audit report.
 
 ## Suggested prompt for the next reviewer
 
-> Read README.md, docs/development-plan.md, and docs/audit-handoff.md, then audit
-> the current implementation. Focus on mathematical correctness, target selection,
-> mobile/accessibility behavior, proof-history integrity, and the suitability of
-> the core for the planned term model. Separate reproducible defects from Phase 1
-> acceptance gaps, later roadmap features, and optional recommendations. Cite
-> files/lines and give concrete reproduction steps or tests. Do not implement
-> changes, publish, alter dependencies, or stop the running server. Report what
-> you verified and what remains untested.
+> Read README.md, docs/development-plan.md, docs/audit-handoff.md,
+> docs/audit-2026-08-27.md, and docs/phase-2-2026-08-27.md, then audit the
+> current implementation. Focus on the soundness of the term model and the rule
+> catalogue, target and gap resolution in nested terms, parser and import
+> validation, proof-record integrity and the replay verifier, per-challenge rule
+> gating against circular proofs, and mobile/accessibility behaviour. Separate
+> reproducible defects from Phase 3-6 features and from optional
+> recommendations. Cite files/lines and give concrete reproduction steps or
+> tests. Do not implement changes, publish, alter dependencies, or stop the
+> running server. Report what you verified and what remains untested.

@@ -13,34 +13,68 @@ Start here when reviewing the code with fresh context:
 - [Audit record, 2026-08-27](docs/audit-2026-08-27.md) — the first audit pass:
   defects reproduced and fixed, security posture, and what remains untested.
 
-## Phase 1
+## Phase 2
 
-This is a fixed-example interaction prototype, not the full expression engine.
-The original Phase 1 acceptance is incomplete: expression parsing/input and
-reproducible target-selection and viewport tests remain. There is no recursive
-term model, equation mode, custom relations, or unlock system yet.
+The app is now a recursive expression workbench. Expressions are terms —
+generators, the identity, flat products, inverses, and integer powers — rather
+than a flat list of factors, and they can be typed rather than only chosen from.
 
-The opening challenge asks the learner to simplify
+Selecting a group law marks every legal target with its own bracket beneath the
+expression; overlapping targets, and insertion points that coincide on screen at
+different depths, get separate brackets, so no two candidates ever share a
+control. Applying a law appends the resulting expression and its reason to an
+equality chain.
+
+What Phase 2 added on top of the Phase 1 slice:
+
+- a recursive term model with paths and spans, so a rule can address the `ab`
+  inside `(ab)^-1 a b` without any manual regrouping;
+- a restricted parser with live typeset feedback, and a canonical serializer
+  that round trips;
+- integer powers kept as notation, with rules to write them out, combine them,
+  and move an inverse through them;
+- insertion rules — the learner names the term, then picks the gap — and the
+  reverse direction of the structural rewrites;
+- six curated challenges, each declaring the rules it permits, plus a free
+  exploration mode with the whole catalogue;
+- export as a structured proof record or as LaTeX, a shareable link, and an
+  import that replays every step against the same rule contracts before showing
+  anything;
+- keyboard navigation across candidates (arrows, digits) and undo/redo.
+
+Associativity is still suppressed in the interface: products are flat, so
+students do not spend their time rearranging parentheses. Structure under an
+inverse or a power is kept, because that structure is mathematically meaningful.
+
+### Notation
+
+Products are written by juxtaposition, with `*` and `·` accepted as optional
+separators:
 
 ```text
-a a^-1 b c^-1 c
+ab          a b          a*b
+(ab)^-1 c   a^3          a^-2        (a^2)^3
+r2 s        e
 ```
 
-to `b`. Selecting a group law marks every legal target with its own bracket beneath the
-expression; overlapping targets get separate brackets, so no two candidates ever
-share a control. Applying a law appends the resulting expression and its reason
-to an equality chain. The current vertical slice includes:
+A generator is one letter followed by any digits, so `r2` is a generator and
+`a^2` is a power; juxtaposition is never ambiguous. `e` is the identity and may
+not name a generator. `a^1` and `a^-1` are notation for the term and its
+inverse, not extra structure. Repeated powers need parentheses. Input is length,
+depth, exponent, and node limited, and is never evaluated.
 
-- rule-first target marking, one control per candidate span;
-- inverse cancellation and identity removal;
-- explicit equality history and optional reason labels;
-- undo, redo, and restart over a pure proof-history reducer;
-- KaTeX typesetting, with all accessible text supplied as spoken forms rather
-  than TeX source;
-- responsive desktop and mobile layouts; and
-- a DOM-free, tested transformation engine.
+### Rules and challenges
 
-Associativity is intentionally suppressed in the interface: products are represented as flat factor lists, so students do not spend their time rearranging parentheses.
+Every rule in the catalogue is a theorem of any group. Whether a *challenge* may
+use it is separate: each challenge names its permitted rules, and that ruleset
+travels with the proof. A challenge that establishes a lemma must not list that
+lemma among its tools, and an imported proof claiming a challenge is rejected if
+it used tools that challenge forbids.
+
+### What is still not implemented
+
+No equation mode, implication mode, custom relations or presentations, unlock
+system, hints, progress storage, or personal bests. Those are Phases 3 to 6.
 
 ## Run locally
 
@@ -72,7 +106,7 @@ npm run build
 npm run test:browser
 ```
 
-`npm run test:browser` runs the Playwright suite in `tests/browser`, against a
+`npm run test:browser` runs the Playwright suites in `tests/browser`, against a
 desktop viewport and a genuine 390px phone profile. It asserts behavioural
 invariants — focus destinations, dock-versus-active-line geometry, one control
 per candidate, no TeX in accessible names — rather than appearance, so it should
@@ -83,13 +117,20 @@ passes also remain open. See the audit record for the current gaps.
 
 ## Project shape
 
-- `app/core.ts` — factor representation, the rule table, target spans, validation,
-  and verified transformations
-- `app/proof.ts` — proof history as a DOM-free reducer (apply, undo, redo, restart)
+- `app/term.ts` — the recursive term model: construction with associative
+  flattening, structural equality, paths, spans and gaps, validation, and the
+  TeX, spoken, and source renderings
+- `app/parse.ts` — the restricted parser and its error reporting
+- `app/rules.ts` — the rule catalogue: matching and rewriting defined together,
+  one entry per rule
+- `app/challenges.ts` — challenge data, including each challenge's ruleset
+- `app/proof.ts` — proof history as a DOM-free reducer, plus the replay verifier
+- `app/serialize.ts` — proof record export/import, LaTeX export, share links
+- `app/render.ts` — laying a term out as grid columns so brackets can span it
 - `app/page.tsx` — React interaction and typesetting
 - `app/globals.css` — visual system and responsive layout
-- `tests/core.test.ts`, `tests/proof.test.ts` — engine and proof-history tests
-- `tests/browser/invariants.spec.ts` — Playwright interaction invariants
+- `tests/*.test.ts` — Node tests for each module above
+- `tests/browser/*.spec.ts` — Playwright interaction invariants
 
 The mathematical interaction runs in the browser and uses no database or backend
 solver. The current React/Vinext/Sites scaffold still requires a build and web

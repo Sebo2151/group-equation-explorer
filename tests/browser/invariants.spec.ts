@@ -111,10 +111,10 @@ test('every candidate gets exactly one control, and they are distinct', async ({
 test('each control announces its own span and its position among the options', async ({ page }) => {
   await selectLaw(page, laws.inverse);
   await expect(targets(page).nth(0)).toHaveAccessibleName(
-    'Cancel inverse pair at a, a inverse. Option 1 of 2.',
+    'Cancel inverse pair at a times a inverse. Option 1 of 2.',
   );
   await expect(targets(page).nth(1)).toHaveAccessibleName(
-    'Cancel inverse pair at c inverse, c. Option 2 of 2.',
+    'Cancel inverse pair at c inverse times c. Option 2 of 2.',
   );
 });
 

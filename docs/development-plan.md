@@ -234,7 +234,7 @@ inverse-pair order; every legal target is unambiguous; undo/redo and branching w
 the proof and controls remain usable on desktop and phone. Input tests cover the
 documented subset and reject malformed input without losing the existing proof.
 
-### Phase 2 — Core expression workbench: planned
+### Phase 2 — Core expression workbench: implemented
 
 Extend the term model and parser to nested products/inverses and integer powers.
 Add identity/inverse-pair insertion, bidirectional rewrites, free expression
@@ -244,6 +244,12 @@ URL sharing/import if practical). Do not auto-simplify away the steps being taug
 Acceptance: nested targets and product spans resolve correctly; each recorded
 step replays; input/serialization round trips preserve structure modulo explicit
 associative normalization; imports are validated and size-limited.
+
+Implemented on 2026-08-27; see [phase-2-2026-08-27.md](phase-2-2026-08-27.md)
+for the decisions taken, the acceptance evidence, and what was deliberately left
+out. Two things could not be verified on the implementing machine: the
+production build (a Dropbox lock on `dist/`) and any git operation (a `.git`
+ownership mismatch).
 
 ### Phase 3 — Equation workbench: planned
 

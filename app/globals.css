@@ -17,7 +17,10 @@
   --gold-soft: #fff1cf;
   --shadow: 0 18px 55px rgba(36, 29, 18, 0.1);
   --radius: 12px;
-  /* Height reserved under the proof sheet for the sticky mobile rule dock. */
+  /* Height reserved under the proof sheet for the sticky mobile rule dock.
+     This is the pre-measurement fallback: the dock's real height depends on how
+     many laws a challenge permits, so `page.tsx` measures it and overwrites
+     this custom property on the document element. */
   --dock-height: 104px;
 }
 
@@ -112,14 +115,20 @@ h2 { margin-bottom: 0; font-size: 1.05rem; letter-spacing: -0.015em; }
 .factor {
   display: inline-grid;
   grid-row: 1;
-  min-width: 37px;
+  min-width: 0;
   min-height: 52px;
   place-items: center;
   border-radius: 8px;
   color: var(--ink);
-  padding: 5px 6px;
+  padding: 5px 2px;
   transition: background-color 120ms, color 120ms;
 }
+/* Only the mathematics gets a comfortable target width. Parentheses and
+   superscripts are their own columns so that a base and the inverse around it
+   are distinguishable controls, but they should not be spaced like factors. */
+.factor.is-atom { min-width: 34px; padding-inline: 6px; }
+.factor.is-open, .factor.is-close { padding-inline: 0; }
+.factor.is-script { padding-inline: 0; margin-left: -1px; }
 .factor.is-candidate { background: rgba(240, 180, 60, 0.13); }
 .factor.is-active { background: var(--gold-soft); color: #70450d; }
 
@@ -193,6 +202,118 @@ h2 { margin-bottom: 0; font-size: 1.05rem; letter-spacing: -0.015em; }
 .phase-note > span { display: inline-block; margin-bottom: 6px; border-radius: 4px; background: #ece7de; color: var(--muted); padding: 3px 6px; font-size: 0.62rem; font-weight: 850; letter-spacing: 0.06em; text-transform: uppercase; }
 .phase-note p { margin: 0; color: var(--muted); font-size: 0.76rem; line-height: 1.45; }
 
+/* Insertion points sit in their own zero-width columns between the factors, so
+   a rule that inserts has somewhere to attach without disturbing the spacing
+   of the expression. */
+.target.is-insertion { justify-self: center; }
+.target.is-insertion .target-bracket {
+  width: 14px;
+  height: 14px;
+  border: 2px dashed var(--blue);
+  border-top: 2px dashed var(--blue);
+  border-radius: 5px;
+  background: var(--blue-soft);
+}
+.target.is-insertion .target-label { background: var(--blue-deep); }
+.target.is-insertion:hover .target-bracket, .target.is-insertion.is-active .target-bracket {
+  border-style: solid;
+  background: #cfe0ff;
+}
+.target:disabled { cursor: not-allowed; opacity: 0.45; }
+
+.challenge-picker {
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--muted);
+  padding: 3px 6px;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.notice {
+  margin: 0 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 9px 12px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+.notice.is-ok { border-color: #b8dcc6; background: var(--green-soft); color: var(--green); }
+.notice.is-error { border-color: #e0bdb0; background: #fdeee8; color: #94391c; }
+
+.share-card, .free-card {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 253, 248, 0.86);
+  padding: 14px 16px;
+}
+.share-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.share-import { display: grid; gap: 7px; justify-items: start; }
+.share-import label, .free-field label, .instantiation label {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+.share-import textarea, .free-field input, .instantiation input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  color: var(--ink);
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+}
+.share-import textarea:focus-visible, .free-field input:focus-visible, .instantiation input:focus-visible {
+  outline: 3px solid rgba(47, 104, 201, 0.28);
+  outline-offset: 1px;
+}
+.share-note, .free-note { margin: 0; color: var(--muted); font-size: 0.74rem; line-height: 1.45; }
+.free-note code {
+  border-radius: 4px;
+  background: #efe9de;
+  padding: 1px 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+}
+
+.free-card { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; }
+.free-card .free-note { grid-column: 1 / -1; }
+.free-field { display: grid; gap: 6px; }
+.field-preview { min-height: 26px; color: var(--ink); font-size: 1.05rem; }
+.field-preview.is-error { color: #94391c; font-size: 0.74rem; line-height: 1.4; }
+.field-preview.is-muted { color: var(--muted); font-size: 0.74rem; }
+
+.instantiation {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 14px;
+  border: 1px solid var(--blue);
+  border-radius: 10px;
+  background: linear-gradient(145deg, #fff, var(--blue-soft));
+  padding: 11px;
+}
+.order-toggle { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 0.74rem; font-weight: 700; }
+.order-toggle input { width: 16px; height: 16px; }
+
+.rule-family + .rule-family { margin-top: 14px; }
+.family-label {
+  margin: 0 0 7px;
+  color: var(--muted);
+  font-size: 0.63rem;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
 footer { padding: 17px 4px 0; color: var(--muted); font-size: 0.72rem; text-align: center; }
 footer p { margin: 0; }
 
@@ -208,8 +329,12 @@ footer p { margin: 0; }
   .proof-paper { min-height: 390px; padding: 25px 15px calc(var(--dock-height) + 20px); }
   .proof-line, .success-note { scroll-margin-bottom: calc(var(--dock-height) + 20px); scroll-margin-top: 12px; }
   .rules-card { position: sticky; bottom: 4px; z-index: 8; padding: 8px; box-shadow: 0 12px 50px rgba(36, 29, 18, 0.22); }
-  .rules-heading, .phase-note { display: none; }
+  .rules-heading, .phase-note, .family-label { display: none; }
+  .rule-family + .rule-family { margin-top: 7px; }
   .rule-list { grid-template-columns: 1fr 1fr; gap: 7px; }
+  .rules-card { max-height: 42vh; overflow-y: auto; overscroll-behavior: contain; }
+  .free-card { grid-template-columns: minmax(0, 1fr); }
+  .share-actions .tool-button { flex: 1 1 auto; }
   .rule-card { min-height: 48px; gap: 3px; padding: 6px; }
   /* The law itself stays visible; only the prose moves into the selection note,
      which is the one place that always describes the law now in play. */
@@ -227,7 +352,7 @@ footer p { margin: 0; }
   .reason-detail { max-width: none; }
   .proof-line .reason { grid-column: 2; justify-self: start; margin-left: 8px; }
   .expression-slot { padding-inline: 5px; }
-  .factor { min-width: 36px; padding-inline: 4px; }
+  .factor.is-atom { min-width: 33px; padding-inline: 4px; }
   .target { min-height: 44px; margin: 0 1px; }
   .target-bracket { height: 11px; }
   .rule-topline { align-items: flex-start; }
