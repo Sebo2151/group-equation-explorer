@@ -17,6 +17,8 @@
   --gold-soft: #fff1cf;
   --shadow: 0 18px 55px rgba(36, 29, 18, 0.1);
   --radius: 12px;
+  /* Height reserved under the proof sheet for the sticky mobile rule dock. */
+  --dock-height: 104px;
 }
 
 * { box-sizing: border-box; }
@@ -93,35 +95,81 @@ h2 { margin-bottom: 0; font-size: 1.05rem; letter-spacing: -0.015em; }
   background-image: linear-gradient(rgba(98, 126, 167, 0.075) 1px, transparent 1px);
   background-size: 100% 33px;
 }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; border: 0; padding: 0; overflow: hidden; white-space: nowrap; clip-path: inset(50%); }
+
 .proof-lines { display: grid; gap: 18px; }
+.proof-line:focus-visible { outline: 2px solid var(--blue); outline-offset: 4px; border-radius: 8px; }
 .proof-line { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; min-height: 56px; }
 .relation { color: var(--muted); font-family: Georgia, serif; font-size: 1.85rem; text-align: center; }
-.expression-slot { min-width: 0; overflow-x: auto; overflow-y: visible; padding: 10px 8px; }
-.static-math, .interactive-expression { font-size: clamp(1.42rem, 3vw, 2rem); }
-.interactive-expression { display: inline-flex; align-items: center; min-height: 58px; white-space: nowrap; }
+.expression-slot { min-width: 0; overflow-x: auto; overflow-y: visible; padding: 10px 8px 4px; }
+.static-math, .expression-stage { font-size: clamp(1.42rem, 3vw, 2rem); }
+.static-math { display: inline-block; }
+
+/* The factors and every candidate bracket share one grid, so a bracket can span
+   exactly the columns of the factors it applies to. */
+.expression-stage { display: inline-grid; justify-content: start; align-items: end; row-gap: 3px; white-space: nowrap; }
+.factor-row { display: contents; }
 .factor {
-  position: relative;
   display: inline-grid;
+  grid-row: 1;
   min-width: 37px;
   min-height: 52px;
   place-items: center;
-  border: 0;
   border-radius: 8px;
-  background: transparent;
   color: var(--ink);
   padding: 5px 6px;
-  cursor: default;
+  transition: background-color 120ms, color 120ms;
 }
-.factor:disabled { opacity: 1; }
-.factor.target-start { z-index: 1; background: var(--gold-soft); color: #70450d; cursor: pointer; box-shadow: inset 2px 0 var(--gold), inset 0 2px var(--gold), inset 0 -2px var(--gold); border-radius: 8px 0 0 8px; }
-.factor.target-end { background: var(--gold-soft); color: #70450d; box-shadow: inset -2px 0 var(--gold), inset 0 2px var(--gold), inset 0 -2px var(--gold); border-radius: 0 8px 8px 0; }
-.factor.target-start.target-end { border-radius: 8px; box-shadow: inset 0 0 0 2px var(--gold); }
-.factor.target-start:hover { background: #ffe6a6; }
-.target-marker { position: absolute; top: -14px; left: 3px; border-radius: 4px; background: var(--gold); color: white; padding: 1px 4px; font-family: Inter, sans-serif; font-size: 0.49rem; font-weight: 900; letter-spacing: 0.05em; text-transform: uppercase; }
-.reason { border: 0; border-bottom: 1px dashed var(--line-strong); background: transparent; color: var(--muted); padding: 3px 0; font-size: 0.73rem; cursor: help; white-space: nowrap; }
+.factor.is-candidate { background: rgba(240, 180, 60, 0.13); }
+.factor.is-active { background: var(--gold-soft); color: #70450d; }
 
-.selection-note, .success-note { display: flex; align-items: center; gap: 10px; width: fit-content; margin: 30px 0 0 38px; border-radius: 9px; padding: 10px 12px; color: var(--muted); background: rgba(255, 255, 255, 0.78); font-size: 0.8rem; }
-.selection-swatch { width: 19px; height: 19px; border: 2px solid var(--gold); border-radius: 5px; background: var(--gold-soft); }
+/* One control per candidate. Overlapping spans occupy different grid rows, so
+   they never collapse onto the factor they share. */
+.target {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 1px;
+  min-height: 30px;
+  margin: 0 2px;
+  border: 0;
+  border-radius: 0 0 7px 7px;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+.target-bracket {
+  width: 100%;
+  height: 9px;
+  border: 2px solid var(--gold);
+  border-top: 0;
+  border-radius: 0 0 7px 7px;
+  background: rgba(240, 180, 60, 0.1);
+}
+.target-label {
+  border-radius: 999px;
+  background: var(--gold);
+  color: #fff;
+  padding: 0 6px;
+  font-family: Inter, sans-serif;
+  font-size: 0.58rem;
+  font-weight: 900;
+  line-height: 1.55;
+}
+.target:hover .target-bracket, .target.is-active .target-bracket { background: var(--gold-soft); border-color: #d99a1c; }
+.target:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; border-radius: 7px; }
+
+.reason-slot { display: grid; justify-items: start; gap: 4px; }
+.reason { display: inline-flex; align-items: center; gap: 5px; min-height: 34px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255, 255, 255, 0.7); color: var(--muted); padding: 0 10px; font-size: 0.73rem; cursor: pointer; white-space: nowrap; }
+.reason:hover { border-color: var(--line-strong); color: var(--ink); }
+.reason-caret { font-weight: 900; }
+.reason-detail { max-width: 190px; margin: 0; color: var(--muted); font-size: 0.71rem; line-height: 1.45; white-space: normal; }
+
+.selection-note, .success-note { display: flex; align-items: center; gap: 10px; max-width: 34rem; margin: 30px 0 0 38px; border-radius: 9px; padding: 10px 12px; color: var(--muted); background: rgba(255, 255, 255, 0.78); font-size: 0.8rem; }
+.selection-note div { display: grid; gap: 2px; }
+.selection-note strong { color: var(--ink); }
+.selection-note span:last-child { line-height: 1.45; }
+.selection-swatch { flex: none; width: 19px; height: 19px; border: 2px solid var(--gold); border-radius: 5px; background: var(--gold-soft); }
 .success-note { border: 1px solid #b8dcc6; background: var(--green-soft); color: var(--green); }
 .success-mark { display: grid; width: 27px; height: 27px; place-items: center; border-radius: 50%; background: var(--green); color: white; font-weight: 900; }
 .success-note div { display: grid; gap: 1px; }
@@ -156,13 +204,18 @@ footer p { margin: 0; }
   .workspace { display: flex; flex-direction: column; }
   .proof-card, .rules-card { width: 100%; }
   .proof-card { min-height: auto; }
-  .proof-paper { min-height: 390px; padding: 25px 15px 28px; }
+  /* Reserve room for the sticky dock so it never sits over the active line. */
+  .proof-paper { min-height: 390px; padding: 25px 15px calc(var(--dock-height) + 20px); }
+  .proof-line, .success-note { scroll-margin-bottom: calc(var(--dock-height) + 20px); scroll-margin-top: 12px; }
   .rules-card { position: sticky; bottom: 4px; z-index: 8; padding: 8px; box-shadow: 0 12px 50px rgba(36, 29, 18, 0.22); }
-  .rules-heading { display: none; }
+  .rules-heading, .phase-note { display: none; }
   .rule-list { grid-template-columns: 1fr 1fr; gap: 7px; }
   .rule-card { min-height: 48px; gap: 3px; padding: 6px; }
-  .rule-formula, .rule-description, .phase-note { display: none; }
-  .selection-note { display: none; }
+  /* The law itself stays visible; only the prose moves into the selection note,
+     which is the one place that always describes the law now in play. */
+  .rule-description { display: none; }
+  .rule-formula { font-size: 0.92rem; }
+  .selection-note, .success-note { margin: 22px 0 0; }
 }
 
 @media (max-width: 540px) {
@@ -171,10 +224,12 @@ footer p { margin: 0; }
   .status-pill { grid-column: 2; width: fit-content; }
   .section-heading { padding: 13px; }
   .proof-line { grid-template-columns: 22px minmax(0, 1fr); min-height: 52px; }
+  .reason-detail { max-width: none; }
   .proof-line .reason { grid-column: 2; justify-self: start; margin-left: 8px; }
   .expression-slot { padding-inline: 5px; }
-  .factor { min-width: 34px; padding-inline: 4px; }
-  .selection-note, .success-note { margin-left: 23px; }
+  .factor { min-width: 36px; padding-inline: 4px; }
+  .target { min-height: 44px; margin: 0 1px; }
+  .target-bracket { height: 11px; }
   .rule-topline { align-items: flex-start; }
   .candidate-count { white-space: nowrap; }
 }

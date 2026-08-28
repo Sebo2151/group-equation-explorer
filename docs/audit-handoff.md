@@ -5,13 +5,23 @@ Snapshot date: 2026-08-27. Implementation baseline:
 This handoff and the development plan were added afterward. Always check the
 current working tree before assuming that this snapshot is still current.
 
+> **Superseded in part.** An audit pass against this document was completed on
+> 2026-08-27 and its confirmed defects were fixed. See
+> [audit-2026-08-27.md](audit-2026-08-27.md) for what was reproduced, what was
+> changed, and what remains open. The "What exists" and "Concrete review
+> priorities" sections below describe the code *before* that pass; several
+> items in them are now resolved. Read the audit record alongside this file.
+
 ## Read first
 
 1. [Development plan](development-plan.md): product intent, mathematics, six
    phases, unresolved choices, and acceptance gates.
 2. [README](../README.md): commands and entry points.
-3. `app/core.ts`, `app/page.tsx`, `app/globals.css`, and `tests/core.test.ts`.
-4. `package.json`, `tsconfig.json`, `vite.config.ts`, and `app/layout.tsx` when
+3. [Audit record](audit-2026-08-27.md): what the first audit reproduced, fixed,
+   and left open.
+4. `app/core.ts`, `app/proof.ts`, `app/page.tsx`, `app/globals.css`, and the
+   suites in `tests/`.
+5. `package.json`, `tsconfig.json`, `vite.config.ts`, and `app/layout.tsx` when
    reviewing tooling, portability, rendering, or hosting.
 
 The task is an audit of an early prototype, not a request to implement the whole
