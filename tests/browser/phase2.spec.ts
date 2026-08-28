@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { PROOF_FORMAT, PROOF_VERSION } from '../../app/serialize.ts';
+
 /**
  * Phase 2 behaviour: parsed input, nested and gap targets, powers, per-challenge
  * rule gating, and export/import. Assertions are behavioural, so they should
@@ -124,9 +126,11 @@ function shareLink(record: unknown): string {
   return `/#proof=${encoded}`;
 }
 
+// Taken from the app's own constants so a format bump cannot silently leave
+// this fixture testing nothing but the version check.
 const SOCKS_RECORD = {
-  format: 'group-equation-explorer/proof',
-  version: 1,
+  format: PROOF_FORMAT,
+  version: PROOF_VERSION,
   challenge: 'socks-and-shoes',
   start: '(a b)^-1 a b',
   goal: 'e',

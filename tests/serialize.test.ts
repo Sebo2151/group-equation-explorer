@@ -15,14 +15,18 @@ import {
   proofToJson,
   proofToLatex,
 } from '../app/serialize.ts';
-import { MAX_NODES, termSource } from '../app/term.ts';
+import { expression, subjectSource, type Address } from '../app/subject.ts';
+import { MAX_NODES, type Target } from '../app/term.ts';
+
+/** Every proof in this file is an expression chain, so every address is one. */
+const at = (target: Target): Address => ({ kind: 'expression', target });
 
 function solvedOpening(): ProofState {
   let proof = createProof(challengeSetup(challengeById('cancel-pairs')!));
-  proof = applyRule(proof, 'cancel-inverse', { path: [], start: 0, end: 1 });
-  proof = applyRule(proof, 'cancel-inverse', { path: [], start: 2, end: 3 });
-  proof = applyRule(proof, 'remove-identity', { path: [], start: 0, end: 0 });
-  proof = applyRule(proof, 'remove-identity', { path: [], start: 1, end: 1 });
+  proof = applyRule(proof, 'cancel-inverse', at({ path: [], start: 0, end: 1 }));
+  proof = applyRule(proof, 'cancel-inverse', at({ path: [], start: 2, end: 3 }));
+  proof = applyRule(proof, 'remove-identity', at({ path: [], start: 0, end: 0 }));
+  proof = applyRule(proof, 'remove-identity', at({ path: [], start: 1, end: 1 }));
   return proof;
 }
 
@@ -30,13 +34,13 @@ function withInsertion(): ProofState {
   return applyRule(
     createProof(challengeSetup(challengeById('insert-a-pair')!)),
     'insert-inverse-pair',
-    { path: [], start: 0, end: -1 },
+    at({ path: [], start: 0, end: -1 }),
     { term: parseTerm('a'), inverseFirst: true },
   );
 }
 
 function chain(state: ProofState): string[] {
-  return visibleLines(state).map((line) => termSource(line.term));
+  return visibleLines(state).map((line) => subjectSource(line.subject));
 }
 
 /* Round trip ------------------------------------------------------------- */
@@ -66,7 +70,7 @@ test('nested structure survives the round trip', () => {
   const proof = applyRule(
     createProof(challengeSetup(challengeById('nested-inverse')!)),
     'inverse-of-product',
-    { path: [], start: 0, end: 0 },
+    at({ path: [], start: 0, end: 0 }),
   );
   const restored = importProof(proofToJson(proof));
   assert.deepEqual(chain(restored), ['(a b^-1)^-1', '(b^-1)^-1 a^-1']);
@@ -74,25 +78,27 @@ test('nested structure survives the round trip', () => {
 
 test('canonical source longer than editor input survives records and links', () => {
   const start = parseTerm('a'.repeat(121));
-  const opening = createProof(freeSetup(start));
-  assert.ok(termSource(start).length > MAX_INPUT_LENGTH);
+  const opening = createProof(freeSetup(expression(start)));
+  assert.ok(subjectSource(expression(start)).length > MAX_INPUT_LENGTH);
   assert.deepEqual(chain(proofFromHash(proofToHash(opening)!)!), chain(opening));
 
   const proof = applyRule(
-    createProof(freeSetup(start, parseTerm('b'.repeat(121)))),
+    createProof(freeSetup(expression(start), expression(parseTerm('b'.repeat(121))))),
     'insert-inverse-pair',
-    { path: [], start: 0, end: -1 },
+    at({ path: [], start: 0, end: -1 }),
     { term: parseTerm('c'.repeat(121)) },
   );
   assert.deepEqual(importProof(proofToJson(proof)), proof);
 });
 
 test('a maximum-length nested proof uses compact JSON when formatting exceeds the limit', () => {
-  let proof = createProof(freeSetup(parseTerm('a^-1')));
+  let proof = createProof(freeSetup(expression(parseTerm('a^-1'))));
   for (let index = 0; index < MAX_STEPS; index += 1) {
-    proof = applyRule(proof, index % 2 ? 'remove-identity' : 'insert-identity', {
-      path: [0], start: 0, end: index % 2 ? 0 : -1,
-    });
+    proof = applyRule(
+      proof,
+      index % 2 ? 'remove-identity' : 'insert-identity',
+      at({ path: [0], start: 0, end: index % 2 ? 0 : -1 }),
+    );
   }
   assert.ok(JSON.stringify(exportProof(proof), null, 2).length > MAX_IMPORT_CHARACTERS);
   const exported = proofToJson(proof);
@@ -101,12 +107,12 @@ test('a maximum-length nested proof uses compact JSON when formatting exceeds th
 });
 
 test('a record too large even without formatting is refused at export', () => {
-  let proof = createProof(freeSetup(parseTerm('a')));
+  let proof = createProof(freeSetup(expression(parseTerm('a'))));
   const argument = { term: parseTerm(`r${'2'.repeat(MAX_INPUT_LENGTH - 1)}`) };
   for (let index = 0; index < Math.floor(MAX_STEPS / 3); index += 1) {
-    proof = applyRule(proof, 'insert-inverse-pair', { path: [], start: 0, end: -1 }, argument);
-    proof = applyRule(proof, 'cancel-inverse', { path: [], start: 0, end: 1 });
-    proof = applyRule(proof, 'remove-identity', { path: [], start: 0, end: 0 });
+    proof = applyRule(proof, 'insert-inverse-pair', at({ path: [], start: 0, end: -1 }), argument);
+    proof = applyRule(proof, 'cancel-inverse', at({ path: [], start: 0, end: 1 }));
+    proof = applyRule(proof, 'remove-identity', at({ path: [], start: 0, end: 0 }));
   }
   assert.throws(() => proofToJson(proof), /too long to export/);
   assert.equal(proofToHash(proof), null);
@@ -142,7 +148,7 @@ test('import is size limited before any parsing work', () => {
 });
 
 test('the larger record text budget does not bypass structural limits', () => {
-  const record = exportProof(createProof(freeSetup(parseTerm('a'))));
+  const record = exportProof(createProof(freeSetup(expression(parseTerm('a')))));
   record.start = 'a '.repeat(MAX_NODES);
   assert.throws(() => importProof(JSON.stringify(record)), /more than .* parts/);
   record.start = '('.repeat(40) + 'a' + ')'.repeat(40);
@@ -167,7 +173,7 @@ test('a step naming a rule outside the recorded ruleset is refused', () => {
 test('free and unknown challenge imports preserve and enforce their recorded ruleset', () => {
   for (const challenge of ['free', 'someone-elses-challenge']) {
     const record = exportProof(createProof({
-      challenge, start: parseTerm('a'), goal: null, ruleset: ['cancel-inverse'],
+      challenge, start: expression(parseTerm('a')), goal: null, ruleset: ['cancel-inverse'],
     }));
     assert.deepEqual(importProof(JSON.stringify(record)).ruleset, record.ruleset);
     record.steps = [{ rule: 'insert-identity', path: [], start: 0, end: -1 }];
@@ -253,12 +259,12 @@ test('an unreadable fragment is refused rather than half-read', () => {
 test('a proof too long to share says so instead of truncating', () => {
   let proof = createProof({
     challenge: 'free',
-    start: parseTerm('a'),
+    start: expression(parseTerm('a')),
     goal: null,
     ruleset: ['insert-identity'],
   });
   for (let index = 0; index < 120; index += 1) {
-    proof = applyRule(proof, 'insert-identity', { path: [], start: 0, end: -1 });
+    proof = applyRule(proof, 'insert-identity', at({ path: [], start: 0, end: -1 }));
   }
   assert.equal(proofToHash(proof), null);
 });

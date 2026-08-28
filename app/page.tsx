@@ -33,7 +33,13 @@ import {
   tokensInTarget,
   type Layout,
 } from './render.ts';
-import { findTargets, ruleById, RULES, type RuleDefinition, type RuleId } from './rules.ts';
+import {
+  ALL_RULES,
+  anyRuleById,
+  findAddresses,
+  type AnyRuleDefinition,
+  type AnyRuleId,
+} from './catalogue.ts';
 import {
   importProof,
   proofFromHash,
@@ -41,6 +47,13 @@ import {
   proofToJson,
   proofToLatex,
 } from './serialize.ts';
+import {
+  expression,
+  subjectSpeech,
+  subjectTex,
+  type Address,
+  type Subject,
+} from './subject.ts';
 import {
   getNode,
   hostFactors,
@@ -150,6 +163,23 @@ function StaticStage({ term }: { term: Term }) {
   );
 }
 
+/**
+ * A whole subject, typeset without controls.
+ *
+ * Equation lines take this path for now: the model and the rule catalogue
+ * handle them, but the column grid that draws candidate brackets is still
+ * single-expression, so an equation is shown rather than worked on. Nothing in
+ * the interface can currently build one, so this is a guard against a state the
+ * user cannot reach yet rather than a feature with a piece missing.
+ */
+function StaticSubject({ subject }: { subject: Subject }) {
+  return (
+    <span className="static-math" role="math" aria-label={subjectSpeech(subject)}>
+      <span aria-hidden="true" dangerouslySetInnerHTML={mathHtml(subjectTex(subject))} />
+    </span>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* The interactive line                                                */
 /* ------------------------------------------------------------------ */
@@ -174,7 +204,7 @@ function InteractiveExpression({
 }: {
   term: Term;
   layout: Layout;
-  rule: RuleDefinition;
+  rule: AnyRuleDefinition;
   targets: Target[];
   onApply: (request: ApplyRequest) => void;
   blocked: string | null;
@@ -289,7 +319,7 @@ function sameSpan(left: Target, right: Target): boolean {
 
 function describeTarget(
   term: Term,
-  rule: RuleDefinition,
+  rule: AnyRuleDefinition,
   target: Target,
   ordinal: number,
   total: number,
@@ -316,12 +346,12 @@ function describeGap(term: Term, target: Target): string {
 /* ------------------------------------------------------------------ */
 
 function ProofLineView({
-  term,
+  subject,
   detail,
   reason,
   interactive,
 }: {
-  term: Term;
+  subject: Subject;
   detail?: string;
   reason?: string;
   interactive: React.ReactNode;
@@ -330,7 +360,14 @@ function ProofLineView({
 
   return (
     <>
-      <div className="expression-slot">{interactive ?? <StaticStage term={term} />}</div>
+      <div className="expression-slot">
+        {interactive ??
+          (subject.kind === 'expression' ? (
+            <StaticStage term={subject.term} />
+          ) : (
+            <StaticSubject subject={subject} />
+          ))}
+      </div>
       {reason && (
         <div className="reason-slot">
           <button
@@ -377,7 +414,7 @@ function steps(count: number): string {
 
 export default function Home() {
   const [proof, setProof] = useState(() => createProof(challengeSetup(CHALLENGES[0])));
-  const [selectedRule, setSelectedRule] = useState<RuleId>(CHALLENGES[0].rules[0]);
+  const [selectedRule, setSelectedRule] = useState<AnyRuleId>(CHALLENGES[0].rules[0]);
   const [reasonsOpen, setReasonsOpen] = useState(true);
   const [insertSource, setInsertSource] = useState('a');
   const [inverseFirst, setInverseFirst] = useState(false);
@@ -396,14 +433,32 @@ export default function Home() {
 
   const line = currentLine(proof);
   const complete = isComplete(proof);
-  const rule = ruleById(selectedRule);
+  const rule = anyRuleById(selectedRule);
   const isFree = proof.challenge === FREE_CHALLENGE_ID;
   const challenge = challengeById(proof.challenge);
 
-  const layout = useMemo(() => layoutTerm(line.term), [line.term]);
+  /**
+   * Every place the selected law applies on this line, in reading order. The
+   * counts, the spoken summary and the controls all come from this one list,
+   * so they cannot disagree about how many options there are.
+   */
+  const addresses = useMemo(
+    () => (complete ? [] : findAddresses(line.subject, selectedRule)),
+    [complete, line.subject, selectedRule],
+  );
+
+  // The bracket grid is single-expression for now; see `StaticSubject`. An
+  // equation line still lays out its left side so the hook order and the grid
+  // variables stay constant, but it is shown statically rather than worked on.
+  const workedTerm = line.subject.kind === 'expression' ? line.subject.term : line.subject.left;
+  const workable = line.subject.kind === 'expression';
+  const layout = useMemo(() => layoutTerm(workedTerm), [workedTerm]);
   const targets = useMemo(
-    () => (complete ? [] : findTargets(line.term, selectedRule)),
-    [complete, line.term, selectedRule],
+    () =>
+      workable
+        ? addresses.flatMap((address) => (address.kind === 'expression' ? [address.target] : []))
+        : [],
+    [addresses, workable],
   );
 
   const insertParse = useMemo(() => tryParseTerm(insertSource, 'term'), [insertSource]);
@@ -500,7 +555,8 @@ export default function Home() {
           : undefined;
 
       try {
-        const next = applyRule(proof, selectedRule, target, argument);
+        const address: Address = { kind: 'expression', target };
+        const next = applyRule(proof, selectedRule, address, argument);
         moved.current = true;
         setProof(next);
         setNotice(null);
@@ -517,7 +573,7 @@ export default function Home() {
     if (isFree) lastFreeProof.current = proof;
     if (id === FREE_CHALLENGE_ID) {
       open(lastFreeProof.current ?? createProof(freeSetup(
-        parseTerm(DEFAULT_FREE_START), parseTerm(DEFAULT_FREE_GOAL),
+        expression(parseTerm(DEFAULT_FREE_START)), expression(parseTerm(DEFAULT_FREE_GOAL)),
       )));
       return;
     }
@@ -541,7 +597,10 @@ export default function Home() {
       }
       goal = parsedGoal.term;
     }
-    open(createProof(freeSetup(start.term, goal)), { tone: 'ok', text: 'Free exploration ready.' });
+    open(
+      createProof(freeSetup(expression(start.term), goal === null ? null : expression(goal))),
+      { tone: 'ok', text: 'Free exploration ready.' },
+    );
   };
 
   const copy = async (label: string, makeText: () => string) => {
@@ -581,7 +640,7 @@ export default function Home() {
     }
   };
 
-  const permitted = RULES.filter((entry) => ruleAllowed(proof, entry.id));
+  const permitted = ALL_RULES.filter((entry) => ruleAllowed(proof, entry.id));
   const families = [...new Set(permitted.map((entry) => entry.family))];
 
   return (
@@ -649,7 +708,7 @@ export default function Home() {
           <h2 id="challenge-title">
             {proof.goal ? (
               <>
-                Reach <Typeset tex={termTex(proof.goal)} speech={termSpeech(proof.goal)} />
+                Reach <Typeset tex={subjectTex(proof.goal)} speech={subjectSpeech(proof.goal)} />
               </>
             ) : (
               'Explore freely — there is no target'
@@ -767,11 +826,11 @@ export default function Home() {
                       {index === 0 ? '' : '='}
                     </span>
                     <ProofLineView
-                      term={entry.term}
+                      subject={entry.subject}
                       detail={entry.step?.detail}
                       reason={reasonsOpen ? entry.step?.reason : undefined}
                       interactive={
-                        isCurrent && !complete ? (
+                        isCurrent && !complete && entry.subject.kind === 'expression' ? (
                           <InteractiveExpression
                             blocked={blocked}
                             firstTargetRef={firstTargetRef}
@@ -780,7 +839,7 @@ export default function Home() {
                             onApply={apply}
                             rule={rule}
                             targets={targets}
-                            term={entry.term}
+                            term={entry.subject.term}
                           />
                         ) : null
                       }
@@ -792,9 +851,9 @@ export default function Home() {
 
             <p aria-live="polite" className="sr-only">
               {complete
-                ? `Complete. ${termSpeech(line.term)} in ${steps(stepCount(proof))}.`
-                : `${termSpeech(line.term)}. ${targets.length} ${
-                    targets.length === 1 ? 'place' : 'places'
+                ? `Complete. ${subjectSpeech(line.subject)} in ${steps(stepCount(proof))}.`
+                : `${subjectSpeech(line.subject)}. ${addresses.length} ${
+                    addresses.length === 1 ? 'place' : 'places'
                   } for ${rule.name}.`}
             </p>
 
@@ -816,10 +875,14 @@ export default function Home() {
                   <div>
                     <strong>{rule.name}</strong>
                     <span>
-                      {targets.length
-                        ? `${rule.description} ${targets.length} ${
-                            targets.length === 1 ? 'place' : 'places'
-                          } marked ${rule.attachesToGaps ? 'between the factors' : 'below the expression'}.`
+                      {addresses.length
+                        ? `${rule.description} ${addresses.length} ${
+                            addresses.length === 1 ? 'place' : 'places'
+                          } marked ${
+                            rule.scope === 'term' && rule.attachesToGaps
+                              ? 'between the factors'
+                              : 'below the expression'
+                          }.`
                         : `${rule.description} It is still a true law — there is just nowhere to use it here. Try another law.`}
                     </span>
                   </div>
@@ -867,7 +930,7 @@ export default function Home() {
                 {permitted
                   .filter((entry) => entry.family === family)
                   .map((entry) => {
-                    const count = complete ? 0 : findTargets(line.term, entry.id).length;
+                    const count = complete ? 0 : findAddresses(line.subject, entry.id).length;
                     const active = selectedRule === entry.id;
                     return (
                       <button

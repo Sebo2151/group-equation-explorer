@@ -11,9 +11,9 @@
  * to Phase 4.
  */
 
-import { parseTerm } from './parse.ts';
-import { RULE_IDS, type RuleId } from './rules.ts';
-import type { Term } from './term.ts';
+import { parseSubject } from './parse.ts';
+import { ALL_RULE_IDS, type AnyRuleId } from './catalogue.ts';
+import type { Subject } from './subject.ts';
 
 export type Challenge = {
   id: string;
@@ -23,13 +23,13 @@ export type Challenge = {
   /** Source text, parsed on demand so the data stays readable and diffable. */
   start: string;
   goal: string | null;
-  rules: RuleId[];
+  rules: AnyRuleId[];
 };
 
 export const FREE_CHALLENGE_ID = 'free';
 
 /** Everything in the catalogue. Free exploration is not a graded challenge. */
-export const FREE_RULES: RuleId[] = RULE_IDS;
+export const FREE_RULES: AnyRuleId[] = ALL_RULE_IDS;
 
 export const CHALLENGES: Challenge[] = [
   {
@@ -105,20 +105,23 @@ export function challengeById(id: string): Challenge | undefined {
 
 export type ChallengeSetup = {
   challenge: string;
-  start: Term;
-  goal: Term | null;
-  ruleset: RuleId[];
+  start: Subject;
+  goal: Subject | null;
+  ruleset: AnyRuleId[];
 };
 
 export function challengeSetup(challenge: Challenge): ChallengeSetup {
   return {
     challenge: challenge.id,
-    start: parseTerm(challenge.start, `challenge ${challenge.id} start`),
-    goal: challenge.goal === null ? null : parseTerm(challenge.goal, `challenge ${challenge.id} goal`),
+    start: parseSubject(challenge.start, `challenge ${challenge.id} start`),
+    goal:
+      challenge.goal === null
+        ? null
+        : parseSubject(challenge.goal, `challenge ${challenge.id} goal`),
     ruleset: challenge.rules,
   };
 }
 
-export function freeSetup(start: Term, goal: Term | null = null): ChallengeSetup {
+export function freeSetup(start: Subject, goal: Subject | null = null): ChallengeSetup {
   return { challenge: FREE_CHALLENGE_ID, start, goal, ruleset: FREE_RULES };
 }

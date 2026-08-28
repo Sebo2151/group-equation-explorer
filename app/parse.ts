@@ -3,6 +3,7 @@
  *
  * Accepted grammar, and nothing else:
  *
+ *     subject    := expression ( '=' expression )?
  *     expression := factor+
  *     factor     := atom ( '^' exponent )?
  *     atom       := generator | 'e' | '(' expression ')'
@@ -18,6 +19,7 @@
  * name that already matched the narrow pattern in `term.ts`.
  */
 
+import { equation, expression, type Subject } from './subject.ts';
 import {
   generator,
   identity,
@@ -146,6 +148,84 @@ export type ParseResult =
 export function tryParseTerm(text: string, where = 'expression'): ParseResult {
   try {
     return { ok: true, term: parseTerm(text, where) };
+  } catch (error) {
+    if (error instanceof ParseError) {
+      return { ok: false, message: error.message, position: error.position };
+    }
+    throw error;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Subjects                                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * An expression, or two of them joined by `=`.
+ *
+ * The relation is recognised here rather than in the grammar above because it
+ * is not part of a term: `=` may not appear inside parentheses, under an
+ * inverse, or in an exponent, and treating it as an operator would invite all
+ * three. Splitting first and parsing each side with the unchanged term parser
+ * keeps that impossible by construction.
+ */
+export function parseSubject(
+  text: unknown,
+  where = 'expression',
+  maxLength = MAX_INPUT_LENGTH,
+): Subject {
+  if (typeof text !== 'string') {
+    throw new ParseError(`${where} must be text.`, 0);
+  }
+  if (text.length > maxLength) {
+    throw new ParseError(`${where} is longer than ${maxLength} characters.`, maxLength);
+  }
+
+  const relation = text.indexOf('=');
+  if (relation === -1) return expression(parseTerm(text, where, maxLength));
+
+  const second = text.indexOf('=', relation + 1);
+  if (second !== -1) {
+    throw new ParseError('An equation has one equals sign.', second);
+  }
+
+  const leftText = text.slice(0, relation);
+  const rightText = text.slice(relation + 1);
+  if (leftText.trim() === '') {
+    throw new ParseError('The equation is missing its left-hand side.', relation);
+  }
+  if (rightText.trim() === '') {
+    throw new ParseError('The equation is missing its right-hand side.', relation + 1);
+  }
+
+  return equation(
+    parseTerm(leftText, `${where} left-hand side`, maxLength),
+    // Positions are reported against the text the caller typed, so a failure on
+    // the right-hand side is shifted past the relation rather than reported as
+    // though the sides were separate fields.
+    atOffset(relation + 1, () => parseTerm(rightText, `${where} right-hand side`, maxLength)),
+  );
+}
+
+function atOffset<T>(offset: number, read: () => T): T {
+  try {
+    return read();
+  } catch (error) {
+    if (error instanceof ParseError) {
+      throw new ParseError(error.message, error.position + offset);
+    }
+    throw error;
+  }
+}
+
+export type SubjectParseResult =
+  | { ok: true; subject: Subject }
+  | { ok: false; message: string; position: number };
+
+/** Parsing as a value rather than an exception, for live input feedback. */
+export function tryParseSubject(text: string, where = 'expression'): SubjectParseResult {
+  try {
+    return { ok: true, subject: parseSubject(text, where) };
   } catch (error) {
     if (error instanceof ParseError) {
       return { ok: false, message: error.message, position: error.position };

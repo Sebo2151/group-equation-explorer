@@ -10,10 +10,21 @@ import {
   replayProof,
   type ProofState,
 } from '../app/proof.ts';
-import { findTargets, ruleById, type RuleArgument, type RuleId } from '../app/rules.ts';
-import { termSource, type Target, type Term } from '../app/term.ts';
+import {
+  anyRuleById,
+  findAddresses,
+  type AnyRuleId,
+} from '../app/catalogue.ts';
+import { type RuleArgument } from '../app/rules.ts';
+import {
+  expression,
+  subjectSource,
+  subjectTerms,
+  type Address,
+} from '../app/subject.ts';
+import { type Term } from '../app/term.ts';
 
-type Move = { rule: RuleId; target: Target; argument?: RuleArgument };
+type Move = { rule: AnyRuleId; address: Address; argument?: RuleArgument };
 
 /**
  * A bounded breadth-first search for a proof using only the challenge's own
@@ -25,7 +36,7 @@ function search(state: ProofState, maxDepth: number, maxStates = 20_000): Move[]
   const goal = state.goal;
   if (goal === null) return null;
 
-  const seen = new Set([termSource(state.lines[0].term)]);
+  const seen = new Set([subjectSource(state.lines[0].subject)]);
   let frontier: { state: ProofState; moves: Move[] }[] = [{ state, moves: [] }];
 
   for (let depth = 0; depth < maxDepth; depth += 1) {
@@ -35,7 +46,7 @@ function search(state: ProofState, maxDepth: number, maxStates = 20_000): Move[]
       for (const move of movesFrom(entry.state)) {
         let advanced: ProofState;
         try {
-          advanced = applyRule(entry.state, move.rule, move.target, move.argument);
+          advanced = applyRule(entry.state, move.rule, move.address, move.argument);
         } catch {
           continue;
         }
@@ -43,7 +54,7 @@ function search(state: ProofState, maxDepth: number, maxStates = 20_000): Move[]
         const moves = [...entry.moves, move];
         if (isComplete(advanced)) return moves;
 
-        const key = termSource(advanced.lines[advanced.index].term);
+        const key = subjectSource(advanced.lines[advanced.index].subject);
         if (seen.has(key)) continue;
         seen.add(key);
         if (seen.size > maxStates) return null;
@@ -59,17 +70,17 @@ function search(state: ProofState, maxDepth: number, maxStates = 20_000): Move[]
 }
 
 function movesFrom(state: ProofState): Move[] {
-  const term = state.lines[state.index].term;
+  const subject = state.lines[state.index].subject;
   const candidates = instantiationCandidates(state);
 
   return state.ruleset.flatMap((rule) =>
-    findTargets(term, rule).flatMap((target) =>
-      ruleById(rule).needsTerm
+    findAddresses(subject, rule).flatMap((address) =>
+      anyRuleById(rule).needsTerm
         ? candidates.flatMap((candidate) => [
-            { rule, target, argument: { term: candidate } },
-            { rule, target, argument: { term: candidate, inverseFirst: true } },
+            { rule, address, argument: { term: candidate } },
+            { rule, address, argument: { term: candidate, inverseFirst: true } },
           ])
-        : [{ rule, target }],
+        : [{ rule, address }],
     ),
   );
 }
@@ -83,8 +94,8 @@ function instantiationCandidates(state: ProofState): Term[] {
     if (term.kind === 'inverse') collect(term.term);
     if (term.kind === 'power') collect(term.base);
   };
-  collect(state.start);
-  if (state.goal) collect(state.goal);
+  subjectTerms(state.start).forEach(collect);
+  if (state.goal) subjectTerms(state.goal).forEach(collect);
   return [...names].sort().map((name) => parseTerm(name));
 }
 
@@ -95,8 +106,8 @@ test('every challenge parses, and its goal is not its start', () => {
     const setup = challengeSetup(challenge);
     assert.ok(setup.goal, `${challenge.id} has no goal`);
     assert.notEqual(
-      termSource(setup.start),
-      termSource(setup.goal!),
+      subjectSource(setup.start),
+      subjectSource(setup.goal!),
       `${challenge.id} starts at its goal`,
     );
   }
@@ -110,7 +121,7 @@ test('challenge ids and labels are unique', () => {
 test('every challenge names only rules that exist', () => {
   for (const challenge of CHALLENGES) {
     assert.ok(challenge.rules.length > 0, `${challenge.id} permits nothing`);
-    for (const rule of challenge.rules) assert.doesNotThrow(() => ruleById(rule));
+    for (const rule of challenge.rules) assert.doesNotThrow(() => anyRuleById(rule));
   }
 });
 
@@ -141,13 +152,13 @@ test('the socks-and-shoes challenge is not solvable without socks and shoes', ()
 });
 
 test('free exploration permits the whole catalogue and never completes', () => {
-  const free = createProof(freeSetup(parseTerm('a a^-1')));
+  const free = createProof(freeSetup(expression(parseTerm('a a^-1'))));
   assert.deepEqual(free.ruleset, FREE_RULES);
   assert.equal(free.goal, null);
   assert.equal(isComplete(free), false);
 });
 
 test('free exploration can be given a goal', () => {
-  const free = createProof(freeSetup(parseTerm('a a^-1'), parseTerm('e')));
+  const free = createProof(freeSetup(expression(parseTerm('a a^-1')), expression(parseTerm('e'))));
   assert.ok(search(free, 2));
 });

@@ -534,13 +534,18 @@ function rewriteExpandPower(root: Term, target: Target): Term {
   return replaceSpan(root, target, copies);
 }
 
-function requireTerm(argument: RuleArgument | undefined, rule: RuleId): Term {
+function requireTerm(argument: RuleArgument | undefined, rule: string): Term {
   if (!argument) throw new RangeError(`Rule ${rule} needs a term.`);
   return validateTerm(argument.term, `${rule} term`);
 }
 
-/** The argument arrives from the UI and from imported proofs alike. */
-export function validateArgument(argument: unknown, rule: RuleId): RuleArgument {
+/**
+ * The argument arrives from the UI and from imported proofs alike.
+ *
+ * `rule` is only ever interpolated into the error message, so it is widened to
+ * `string`: whole-equation rules use this too, and their ids are not `RuleId`s.
+ */
+export function validateArgument(argument: unknown, rule: string): RuleArgument {
   if (typeof argument !== 'object' || argument === null) {
     throw new RangeError(`Rule ${rule} needs a term.`);
   }

@@ -7,8 +7,9 @@
  * and step limits are applied before any of that work begins.
  */
 
+import { anyRuleById, isAnyRuleId, type AnyRuleId } from './catalogue.ts';
 import { challengeById, challengeSetup, type ChallengeSetup } from './challenges.ts';
-import { parseTerm } from './parse.ts';
+import { parseSubject, parseTerm } from './parse.ts';
 import {
   createProof,
   replayableSteps,
@@ -17,11 +18,19 @@ import {
   MAX_STEPS,
   type ProofState,
 } from './proof.ts';
-import { isRuleId, ruleById, type RuleArgument, type RuleId } from './rules.ts';
-import { termsEqual, termSource, termTex, type Path, type Term } from './term.ts';
+import { type RuleArgument } from './rules.ts';
+import {
+  subjectSource,
+  subjectTex,
+  subjectsEqual,
+  type Address,
+  type Side,
+  type Subject,
+} from './subject.ts';
+import { termSource, type Path } from './term.ts';
 
 export const PROOF_FORMAT = 'group-equation-explorer/proof';
-export const PROOF_VERSION = 1;
+export const PROOF_VERSION = 2;
 
 /** Bounds the parsing work an untrusted record can cause. */
 export const MAX_IMPORT_CHARACTERS = 20_000;
@@ -29,11 +38,23 @@ export const MAX_IMPORT_CHARACTERS = 20_000;
 /** Longer than this and a link stops being usable; export the JSON instead. */
 export const MAX_HASH_CHARACTERS = 1_800;
 
+/**
+ * One step, flattened.
+ *
+ * The address is encoded by which fields are present rather than by a nested
+ * object: a whole-equation operation has no `path`, and a local rewrite carries
+ * `side` only when the line it acted on was an equation. That keeps a record
+ * readable by eye, and keeps the common case -- a Phase 2 expression step --
+ * exactly as compact as it was.
+ */
 export type StepRecord = {
-  rule: RuleId;
-  path: number[];
-  start: number;
-  end: number;
+  rule: AnyRuleId;
+  /** Present only for a local rewrite on one side of an equation. */
+  side?: Side;
+  /** Absent on a whole-equation operation, which has no target. */
+  path?: number[];
+  start?: number;
+  end?: number;
   /** Source text of the instantiated term, for rules that need one. */
   term?: string;
   inverseFirst?: boolean;
@@ -45,7 +66,7 @@ export type ProofRecord = {
   challenge: string;
   start: string;
   goal: string | null;
-  ruleset: RuleId[];
+  ruleset: AnyRuleId[];
   steps: StepRecord[];
 };
 
@@ -54,14 +75,15 @@ export function exportProof(state: ProofState): ProofRecord {
     format: PROOF_FORMAT,
     version: PROOF_VERSION,
     challenge: state.challenge,
-    start: termSource(state.start),
-    goal: state.goal === null ? null : termSource(state.goal),
+    start: subjectSource(state.start),
+    goal: state.goal === null ? null : subjectSource(state.goal),
     ruleset: [...state.ruleset],
-    steps: replayableSteps(state).map(({ rule, target, argument }) => ({
+    steps: replayableSteps(state).map(({ rule, address, argument }) => ({
       rule,
-      path: [...target.path],
-      start: target.start,
-      end: target.end,
+      ...(address.kind === 'side' ? { side: address.side } : {}),
+      ...(address.kind === 'equation'
+        ? {}
+        : { path: [...address.target.path], start: address.target.start, end: address.target.end }),
       ...(argument ? { term: termSource(argument.term) } : {}),
       ...(argument?.inverseFirst ? { inverseFirst: true } : {}),
     })),
@@ -124,7 +146,7 @@ function validateRecord(value: unknown): ProofRecord {
   if (record.goal !== null && typeof record.goal !== 'string') {
     throw new TypeError('Proof record has an unreadable goal.');
   }
-  if (!Array.isArray(record.ruleset) || !record.ruleset.every(isRuleId)) {
+  if (!Array.isArray(record.ruleset) || !record.ruleset.every(isAnyRuleId)) {
     throw new TypeError('Proof record names a rule this version does not have.');
   }
   if (!Array.isArray(record.steps)) throw new TypeError('Proof record is missing its steps.');
@@ -138,7 +160,7 @@ function validateRecord(value: unknown): ProofRecord {
     challenge: record.challenge,
     start: record.start,
     goal: record.goal as string | null,
-    ruleset: record.ruleset as RuleId[],
+    ruleset: record.ruleset as AnyRuleId[],
     steps: record.steps.map(validateStepRecord),
   };
 }
@@ -148,27 +170,48 @@ function validateStepRecord(value: unknown, index: number): StepRecord {
   if (typeof value !== 'object' || value === null) throw new TypeError(`${where} is malformed.`);
   const step = value as Record<string, unknown>;
 
-  if (!isRuleId(step.rule)) throw new TypeError(`${where} names an unknown rule.`);
-  if (!Array.isArray(step.path) || !step.path.every((entry) => Number.isInteger(entry) && entry >= 0)) {
-    throw new TypeError(`${where} has an unreadable target path.`);
-  }
-  if (!Number.isInteger(step.start) || !Number.isInteger(step.end)) {
-    throw new TypeError(`${where} has an unreadable target span.`);
-  }
+  if (!isAnyRuleId(step.rule)) throw new TypeError(`${where} names an unknown rule.`);
   if (step.term !== undefined && typeof step.term !== 'string') {
     throw new TypeError(`${where} has an unreadable term.`);
   }
   if (step.inverseFirst !== undefined && typeof step.inverseFirst !== 'boolean') {
     throw new TypeError(`${where} has an unreadable order flag.`);
   }
+  if (step.side !== undefined && step.side !== 'left' && step.side !== 'right') {
+    throw new TypeError(`${where} names a side that is neither left nor right.`);
+  }
+
+  const extras = {
+    ...(step.term === undefined ? {} : { term: step.term as string }),
+    ...(step.inverseFirst ? { inverseFirst: true } : {}),
+  };
+
+  // No target at all: a whole-equation operation. A side without a target is
+  // incoherent rather than merely redundant, so it is refused outright.
+  if (step.path === undefined) {
+    if (step.side !== undefined) {
+      throw new TypeError(`${where} names a side but has no target.`);
+    }
+    if (step.start !== undefined || step.end !== undefined) {
+      throw new TypeError(`${where} has a target span but no target path.`);
+    }
+    return { rule: step.rule, ...extras };
+  }
+
+  if (!Array.isArray(step.path) || !step.path.every((entry) => Number.isInteger(entry) && entry >= 0)) {
+    throw new TypeError(`${where} has an unreadable target path.`);
+  }
+  if (!Number.isInteger(step.start) || !Number.isInteger(step.end)) {
+    throw new TypeError(`${where} has an unreadable target span.`);
+  }
 
   return {
     rule: step.rule,
+    ...(step.side === undefined ? {} : { side: step.side as Side }),
     path: step.path as number[],
     start: step.start as number,
     end: step.end as number,
-    ...(step.term === undefined ? {} : { term: step.term as string }),
-    ...(step.inverseFirst ? { inverseFirst: true } : {}),
+    ...extras,
   };
 }
 
@@ -176,15 +219,16 @@ function replayRecord(record: ProofRecord): ProofState {
   // Canonical source adds spaces and may exceed the editor's 240 characters.
   // The entire record has already passed its size limit; the parser still
   // enforces the same grammar, exponent, depth, and node bounds.
-  const start = parseTerm(record.start, 'starting expression', MAX_IMPORT_CHARACTERS);
-  const goal = record.goal === null ? null : parseTerm(record.goal, 'goal', MAX_IMPORT_CHARACTERS);
+  const start = parseSubject(record.start, 'starting expression', MAX_IMPORT_CHARACTERS);
+  const goal =
+    record.goal === null ? null : parseSubject(record.goal, 'goal', MAX_IMPORT_CHARACTERS);
   const setup = challengeSetupFor(record, start, goal);
 
   return replayProof(
     setup,
     record.steps.map((step) => ({
       rule: step.rule,
-      target: { path: step.path as Path, start: step.start, end: step.end },
+      address: stepAddress(step),
       ...(step.term === undefined
         ? {}
         : {
@@ -203,16 +247,31 @@ function replayRecord(record: ProofRecord): ProofState {
  * challenge that forbids them — the plan's "imported proofs must be validated,
  * not trusted as unlock evidence".
  */
-function challengeSetupFor(record: ProofRecord, start: Term, goal: Term | null): ChallengeSetup {
+function stepAddress(step: StepRecord): Address {
+  if (step.path === undefined) return { kind: 'equation' };
+  const target = { path: step.path as Path, start: step.start as number, end: step.end as number };
+  return step.side === undefined
+    ? { kind: 'expression', target }
+    : { kind: 'side', side: step.side, target };
+}
+
+function challengeSetupFor(
+  record: ProofRecord,
+  start: Subject,
+  goal: Subject | null,
+): ChallengeSetup {
   const challenge = challengeById(record.challenge);
   if (!challenge) return { challenge: record.challenge, start, goal, ruleset: record.ruleset };
 
   const declared = challengeSetup(challenge);
 
-  if (!termsEqual(start, declared.start)) {
+  if (!subjectsEqual(start, declared.start)) {
     throw new RangeError(`Proof claims challenge ${challenge.id} but starts somewhere else.`);
   }
-  if ((goal === null) !== (declared.goal === null) || (goal && declared.goal && !termsEqual(goal, declared.goal))) {
+  if (
+    (goal === null) !== (declared.goal === null) ||
+    (goal && declared.goal && !subjectsEqual(goal, declared.goal))
+  ) {
     throw new RangeError(`Proof claims challenge ${challenge.id} but aims somewhere else.`);
   }
   const extra = record.ruleset.filter((rule) => !challenge.rules.includes(rule));
@@ -241,10 +300,13 @@ function latexText(text: string): string {
 export function proofToLatex(state: ProofState): string {
   const lines = visibleLines(state);
   const body = lines.map((line, index) => {
-    const math = termTex(line.term);
+    const math = subjectTex(line.subject);
     if (index === 0) return `  & ${math} \\\\`;
     const note = latexText(`${line.step!.reason}: ${line.step!.detail}`);
-    return `  &= ${math} && \\text{${note}} \\\\`;
+    // An expression chain is joined by equality; a chain of equations is joined
+    // by equivalence, because each line is a statement rather than a quantity.
+    const connective = line.subject.kind === 'equation' ? '\\iff' : '=';
+    return `  &${connective} ${math} && \\text{${note}} \\\\`;
   });
 
   return ['\\begin{align*}', ...body, '\\end{align*}', ''].join('\n');
@@ -296,6 +358,6 @@ export function reopen(state: ProofState): ProofState {
   return createProof(state);
 }
 
-export function rulesetNames(ruleset: RuleId[]): string[] {
-  return ruleset.map((id) => ruleById(id).name);
+export function rulesetNames(ruleset: AnyRuleId[]): string[] {
+  return ruleset.map((id) => anyRuleById(id).name);
 }

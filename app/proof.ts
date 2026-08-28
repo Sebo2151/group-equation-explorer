@@ -7,24 +7,27 @@
  */
 
 import {
-  applyRule as applyRuleToTerm,
-  isRuleId,
-  validateArgument,
-  type RuleArgument,
-  type RuleId,
-} from './rules.ts';
-import { termsEqual, type Target, type Term } from './term.ts';
+  applyToSubject,
+  isAnyRuleId,
+  type AnyRuleId,
+} from './catalogue.ts';
+import { validateArgument, type RuleArgument } from './rules.ts';
+import { subjectsEqual, type Address, type Subject } from './subject.ts';
 
 export type ProofStep = {
-  rule: RuleId;
-  target: Target;
+  rule: AnyRuleId;
+  /**
+   * Where the law was used: a span inside the expression, a span inside one
+   * side of an equation, or the equation as a whole.
+   */
+  address: Address;
   argument?: RuleArgument;
   reason: string;
   detail: string;
 };
 
 export type ProofLine = {
-  term: Term;
+  subject: Subject;
   /** Absent on the opening line, which is asserted rather than derived. */
   step?: ProofStep;
 };
@@ -32,14 +35,14 @@ export type ProofLine = {
 export type ProofState = {
   /** Which challenge this proof belongs to, or `free` for exploration. */
   challenge: string;
-  start: Term;
-  /** The term to reach, or `null` when there is nothing to reach. */
-  goal: Term | null;
+  start: Subject;
+  /** The subject to reach, or `null` when there is nothing to reach. */
+  goal: Subject | null;
   /**
    * The rules this proof was built with. Frozen for the life of the proof: a
    * score means nothing unless the tools that produced it are recorded too.
    */
-  ruleset: RuleId[];
+  ruleset: AnyRuleId[];
   lines: ProofLine[];
   /** Cursor into `lines`. Lines after it are the redo branch. */
   index: number;
@@ -47,9 +50,9 @@ export type ProofState = {
 
 export type ProofSetup = {
   challenge: string;
-  start: Term;
-  goal: Term | null;
-  ruleset: RuleId[];
+  start: Subject;
+  goal: Subject | null;
+  ruleset: AnyRuleId[];
 };
 
 /** Longest proof the app will build or accept. */
@@ -62,16 +65,16 @@ export function createProof(setup: ProofSetup): ProofState {
     start: setup.start,
     goal: setup.goal,
     ruleset,
-    lines: [{ term: setup.start }],
+    lines: [{ subject: setup.start }],
     index: 0,
   };
 }
 
-function normalizeRuleset(ruleset: unknown): RuleId[] {
+function normalizeRuleset(ruleset: unknown): AnyRuleId[] {
   if (!Array.isArray(ruleset)) throw new TypeError('Ruleset must be a list of rule ids.');
-  const seen: RuleId[] = [];
+  const seen: AnyRuleId[] = [];
   for (const id of ruleset) {
-    if (!isRuleId(id)) throw new TypeError(`Unknown rule id ${JSON.stringify(id)}.`);
+    if (!isAnyRuleId(id)) throw new TypeError(`Unknown rule id ${JSON.stringify(id)}.`);
     if (!seen.includes(id)) seen.push(id);
   }
   if (seen.length === 0) throw new TypeError('A proof needs at least one permitted rule.');
@@ -100,7 +103,7 @@ export function canRedo(state: ProofState): boolean {
   return state.index < state.lines.length - 1;
 }
 
-export function ruleAllowed(state: ProofState, rule: RuleId): boolean {
+export function ruleAllowed(state: ProofState, rule: AnyRuleId): boolean {
   return state.ruleset.includes(rule);
 }
 
@@ -110,8 +113,8 @@ export function ruleAllowed(state: ProofState, rule: RuleId): boolean {
  */
 export function applyRule(
   state: ProofState,
-  rule: RuleId,
-  target: Target,
+  rule: AnyRuleId,
+  address: Address,
   argument?: RuleArgument,
 ): ProofState {
   if (!ruleAllowed(state, rule)) {
@@ -122,7 +125,7 @@ export function applyRule(
   }
 
   const checked = argument === undefined ? undefined : validateArgument(argument, rule);
-  const result = applyRuleToTerm(currentLine(state).term, rule, target, checked);
+  const result = applyToSubject(currentLine(state).subject, rule, address, checked);
   const kept = state.lines.slice(0, state.index + 1);
 
   return {
@@ -130,10 +133,10 @@ export function applyRule(
     lines: [
       ...kept,
       {
-        term: result.term,
+        subject: result.subject,
         step: {
           rule: result.rule,
-          target: result.target,
+          address: result.address,
           ...(result.argument ? { argument: result.argument } : {}),
           reason: result.reason,
           detail: result.detail,
@@ -157,11 +160,13 @@ export function restart(state: ProofState): ProofState {
 }
 
 /**
- * Compare terms, not rendered TeX. Distinct terms can print the same way once
- * subscripts and parentheses are involved, and a goal check must tell them apart.
+ * Compare subjects, not rendered TeX. Distinct terms can print the same way
+ * once subscripts and parentheses are involved, and a goal check must tell them
+ * apart. Equations compare orientation-sensitively, so reaching `v = u` when
+ * the goal is `u = v` leaves symmetry still to be applied.
  */
 export function isComplete(state: ProofState): boolean {
-  return state.goal !== null && termsEqual(currentLine(state).term, state.goal);
+  return state.goal !== null && subjectsEqual(currentLine(state).subject, state.goal);
 }
 
 /**
@@ -171,7 +176,7 @@ export function isComplete(state: ProofState): boolean {
  */
 export function replayProof(
   setup: ProofSetup,
-  steps: { rule: RuleId; target: Target; argument?: RuleArgument }[],
+  steps: { rule: AnyRuleId; address: Address; argument?: RuleArgument }[],
 ): ProofState {
   if (!Array.isArray(steps)) throw new TypeError('Steps must be a list.');
   if (steps.length > MAX_STEPS) {
@@ -180,11 +185,11 @@ export function replayProof(
 
   return steps.reduce(
     (state, step, index) => {
-      if (!isRuleId(step?.rule)) {
+      if (!isAnyRuleId(step?.rule)) {
         throw new TypeError(`Step ${index + 1}: unknown rule id.`);
       }
       try {
-        return applyRule(state, step.rule, step.target, step.argument);
+        return applyRule(state, step.rule, step.address, step.argument);
       } catch (error) {
         throw new RangeError(
           `Step ${index + 1} (${step.rule}) does not check out: ${(error as Error).message}`,
@@ -202,12 +207,12 @@ export function verifyProof(state: ProofState): ProofState {
 
 export function replayableSteps(
   state: ProofState,
-): { rule: RuleId; target: Target; argument?: RuleArgument }[] {
+): { rule: AnyRuleId; address: Address; argument?: RuleArgument }[] {
   return visibleLines(state)
     .slice(1)
     .map(({ step }) => ({
       rule: step!.rule,
-      target: step!.target,
+      address: step!.address,
       ...(step!.argument ? { argument: step!.argument } : {}),
     }));
 }
