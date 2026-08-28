@@ -263,9 +263,6 @@ h2 { margin-bottom: 0; font-size: 1.05rem; letter-spacing: -0.015em; }
 .candidate-count.is-zero { background: #f0ece5; color: var(--muted); }
 .rule-formula { color: var(--blue-deep); font-size: 1.08rem; }
 .rule-description { color: var(--muted); font-size: 0.74rem; line-height: 1.4; }
-.phase-note { margin-top: 17px; border-top: 1px solid var(--line); padding-top: 15px; }
-.phase-note > span { display: inline-block; margin-bottom: 6px; border-radius: 4px; background: #ece7de; color: var(--muted); padding: 3px 6px; font-size: 0.62rem; font-weight: 850; letter-spacing: 0.06em; text-transform: uppercase; }
-.phase-note p { margin: 0; color: var(--muted); font-size: 0.76rem; line-height: 1.45; }
 
 /* Insertion points sit in their own zero-width columns between the factors, so
    a rule that inserts has somewhere to attach without disturbing the spacing
@@ -286,19 +283,6 @@ h2 { margin-bottom: 0; font-size: 1.05rem; letter-spacing: -0.015em; }
 }
 .target:disabled { cursor: not-allowed; opacity: 0.45; }
 
-.challenge-picker {
-  max-width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.9);
-  color: var(--muted);
-  padding: 3px 6px;
-  font: inherit;
-  font-size: 0.72rem;
-  font-weight: 850;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
 
 .notice {
   margin: 0 0 14px;
@@ -311,7 +295,7 @@ h2 { margin-bottom: 0; font-size: 1.05rem; letter-spacing: -0.015em; }
 .notice.is-ok { border-color: #b8dcc6; background: var(--green-soft); color: var(--green); }
 .notice.is-error { border-color: #e0bdb0; background: #fdeee8; color: #94391c; }
 
-.share-card, .free-card {
+.share-card, .menu-card {
   display: grid;
   gap: 12px;
   margin-bottom: 16px;
@@ -350,12 +334,77 @@ h2 { margin-bottom: 0; font-size: 1.05rem; letter-spacing: -0.015em; }
   font-size: 0.72rem;
 }
 
-.free-card { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; }
-.free-card .free-note { grid-column: 1 / -1; }
+.free-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: end; }
 .free-field { display: grid; min-width: 0; gap: 6px; }
 .field-preview { display: block; min-width: 0; max-width: 100%; overflow-x: auto; min-height: 26px; color: var(--ink); font-size: 1.05rem; }
 .field-preview.is-error { color: #94391c; font-size: 0.74rem; line-height: 1.4; }
 .field-preview.is-muted { color: var(--muted); font-size: 0.74rem; }
+
+/* The menu is a column of cards rather than the proof screen's two-column
+   workspace, so it reads the same on a phone as on a desktop. */
+.menu-card { padding: 0; }
+.menu-card .section-heading { padding: 15px 17px; }
+.menu-card > :not(.section-heading):not(.challenge-list) { margin-inline: 17px; }
+.menu-card > :last-child { margin-bottom: 16px; }
+.menu-lead { margin: 12px 0 0; color: var(--muted); font-size: 0.84rem; line-height: 1.5; }
+.menu-card .free-fields, .menu-card .share-import { margin-top: 12px; }
+.menu-card .tool-button { justify-self: start; }
+
+.topbar.is-menu { flex-direction: column; gap: 6px; margin-bottom: 18px; }
+.topbar.is-menu h1 { margin: 0; }
+.topbar.is-menu h1:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; border-radius: 8px; }
+
+.challenge-list { display: grid; margin: 0; padding: 0; list-style: none; }
+.challenge-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  padding: 13px 17px;
+  text-align: left;
+  cursor: pointer;
+}
+.challenge-list li:last-child .challenge-entry { border-bottom: 0; }
+.challenge-entry:hover { background: rgba(47, 104, 201, 0.05); }
+.challenge-entry:focus-visible { outline: 3px solid var(--blue); outline-offset: -3px; }
+.challenge-entry-number {
+  display: grid;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--blue-soft);
+  color: var(--blue-deep);
+  font-size: 0.74rem;
+  font-weight: 900;
+}
+.challenge-entry-copy { display: grid; gap: 3px; min-width: 0; }
+.challenge-entry-copy strong { color: var(--ink); font-size: 0.92rem; }
+.challenge-entry-copy span { color: var(--muted); font-size: 0.81rem; line-height: 1.45; }
+
+.help { display: grid; gap: 4px; margin-top: 12px; color: var(--ink); }
+.help h3 { margin: 10px 0 0; font-size: 0.86rem; }
+.help h3:first-child { margin-top: 0; }
+.help p, .help ol { margin: 0; color: var(--muted); font-size: 0.84rem; line-height: 1.55; }
+.help ol { padding-left: 20px; list-style: decimal; }
+.help li { margin: 2px 0; }
+.help code {
+  border-radius: 4px;
+  background: #efe9de;
+  padding: 1px 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+}
+
+/* Getting back to the menu is a navigation control, not a proof control, so it
+   sits with the title rather than among Undo and Redo. */
+.topbar-lead { display: flex; align-items: center; gap: 13px; min-width: 0; }
+.tool-button.is-back { flex: none; }
+.tool-button.is-back::before { content: '\2190'; margin-right: 6px; }
 
 .instantiation {
   display: grid;
@@ -400,11 +449,10 @@ footer p { margin: 0; }
   }
   .proof-line, .success-note { scroll-margin-bottom: calc(var(--dock-height) + 20px); scroll-margin-top: 12px; }
   .rules-card { position: sticky; bottom: 4px; z-index: 8; padding: 8px; box-shadow: 0 12px 50px rgba(36, 29, 18, 0.22); }
-  .rules-heading, .phase-note, .family-label { display: none; }
+  .rules-heading, .family-label { display: none; }
   .rule-family + .rule-family { margin-top: 7px; }
   .rule-list { grid-template-columns: 1fr 1fr; gap: 7px; }
   .rules-card { max-height: 42vh; overflow-y: auto; overscroll-behavior: contain; }
-  .free-card { grid-template-columns: minmax(0, 1fr); }
   .share-actions .tool-button { flex: 1 1 auto; }
   .rule-card { min-height: 48px; gap: 3px; padding: 6px; }
   /* The law itself stays visible; only the prose moves into the selection note,
@@ -423,6 +471,9 @@ footer p { margin: 0; }
   .reason-detail { max-width: none; }
   .proof-line .reason { grid-column: 2; justify-self: start; margin-left: 8px; }
   .expression-slot { padding-inline: 5px; }
+  .free-fields { grid-template-columns: minmax(0, 1fr); }
+  .challenge-entry { padding: 12px 14px; }
+  .menu-card > :not(.section-heading):not(.challenge-list) { margin-inline: 14px; }
   .factor.is-atom { min-width: 33px; padding-inline: 4px; }
   .target { min-height: 44px; margin: 0 1px; }
   .whole-line { min-height: 44px; }

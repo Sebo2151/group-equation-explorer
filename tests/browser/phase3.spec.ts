@@ -14,6 +14,37 @@ import { PROOF_FORMAT, PROOF_VERSION } from '../../app/serialize.ts';
 
 const targets = (page: Page) => page.getByRole('button', { name: /\. Option \d+ of \d+\.$/ });
 
+/**
+ * Navigation within the loaded app. Not `page.goto`, which reloads and so
+ * discards the drafts and the proof the app is holding.
+ */
+async function goTo(page: Page, hash: string) {
+  await page.evaluate((value) => {
+    window.location.hash = value;
+  }, hash);
+}
+
+/**
+ * The menu, hydrated.
+ *
+ * Filling a field before React attaches sets the DOM value and nothing else, so
+ * pressing Start would use the default the component still holds. Toggling help
+ * proves the handlers are live, and leaves the menu as it was found.
+ */
+async function openMenu(page: Page) {
+  await goTo(page, '#menu');
+  await expect(page.getByRole('heading', { name: 'Choose something to prove' })).toBeVisible();
+
+  // `exact`, because challenge 09 is called "Read it the other way".
+  const toggle = page.getByRole('button', { name: 'Read it', exact: true });
+  await expect(async () => {
+    await toggle.click();
+    await expect(page.locator('.help')).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 15_000 });
+  await page.getByRole('button', { name: 'Hide' }).click();
+  await expect(page.locator('.help')).toHaveCount(0);
+}
+
 const wholeLine = (page: Page) =>
   page.getByRole('button', { name: /\. Applies to the whole equation\.$/ });
 
@@ -37,23 +68,33 @@ async function currentLine(page: Page) {
   return page.locator('.proof-line.is-current [role=math]').first().getAttribute('aria-label');
 }
 
-/** Open free exploration on a given start, with no goal unless one is given. */
+/**
+ * Open free exploration on a given start, with no goal unless one is given.
+ * The form lives on the menu, so this fills it there and presses Start, which
+ * is what moves to the proof sheet.
+ */
 async function startFree(page: Page, start: string, goal = '') {
-  const picker = page.getByRole('combobox');
+  await openMenu(page);
+  await page.getByLabel('Start from').fill(start);
+  await page.getByLabel('Goal (optional)').fill(goal);
   await expect(async () => {
-    await picker.selectOption('free');
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
     await expect(page.locator('.challenge-number')).toHaveText('··', { timeout: 1000 });
   }).toPass({ timeout: 15_000 });
+  await expect(page.locator('.notice.is-error')).toHaveCount(0);
+}
 
+/** Fill the free-exploration form and press Start, without expecting success. */
+async function tryStartFree(page: Page, start: string, goal = '') {
+  await openMenu(page);
   await page.getByLabel('Start from').fill(start);
   await page.getByLabel('Goal (optional)').fill(goal);
   await page.getByRole('button', { name: 'Start', exact: true }).click();
-  await expect(page.locator('.notice.is-error')).toHaveCount(0);
 }
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /^Build a/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Choose something to prove' })).toBeVisible();
 });
 
 /* Entering an equation --------------------------------------------------- */
@@ -65,27 +106,12 @@ test('an equation can be typed, and reads as an equation', async ({ page }) => {
 });
 
 test('a start and goal must agree about being equations', async ({ page }) => {
-  const picker = page.getByRole('combobox');
-  await expect(async () => {
-    await picker.selectOption('free');
-    await expect(page.locator('.challenge-number')).toHaveText('··', { timeout: 1000 });
-  }).toPass({ timeout: 15_000 });
-
-  await page.getByLabel('Start from').fill('a x = b');
-  await page.getByLabel('Goal (optional)').fill('b');
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await tryStartFree(page, 'a x = b', 'b');
   await expect(page.locator('.notice.is-error')).toContainText('both equations');
 });
 
 test('an equation with two relations is refused', async ({ page }) => {
-  const picker = page.getByRole('combobox');
-  await expect(async () => {
-    await picker.selectOption('free');
-    await expect(page.locator('.challenge-number')).toHaveText('··', { timeout: 1000 });
-  }).toPass({ timeout: 15_000 });
-
-  await page.getByLabel('Start from').fill('a = b = c');
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await tryStartFree(page, 'a = b = c');
   await expect(page.locator('.notice.is-error')).toContainText('one equals sign');
 });
 
@@ -235,20 +261,23 @@ test.describe('narrow viewport', () => {
 /* ------------------------------------------------------------------ */
 
 const CHALLENGE_LABEL: Record<string, string> = {
+  'cancel-pairs': '01',
   'solve-left': '07',
   'solve-right': '08',
   'inverses-of-equals': '10',
   cancellation: '11',
 };
 
+/**
+ * Navigation is by URL fragment, so a challenge is reachable directly. The
+ * challenge number confirms the app actually arrived: asserting the fragment
+ * would only confirm the test's own input.
+ */
 async function chooseChallenge(page: Page, value: string) {
-  const picker = page.getByRole('combobox');
-  await expect(async () => {
-    await picker.selectOption(value);
-    await expect(page.locator('.challenge-number')).toHaveText(CHALLENGE_LABEL[value], {
-      timeout: 1000,
-    });
-  }).toPass({ timeout: 15_000 });
+  await goTo(page, value === 'free' ? '#free' : `#challenge=${value}`);
+  await expect(page.locator('.challenge-number')).toHaveText(CHALLENGE_LABEL[value], {
+    timeout: 15_000,
+  });
 }
 
 /** Apply the whole-line control, waiting for the step to actually commit. */
@@ -258,16 +287,6 @@ async function applyWholeLine(page: Page) {
     await wholeLine(page).click();
     expect(await stepCount(page)).toBe(before + 1);
   }).toPass({ timeout: 15_000 });
-}
-
-/** Server-rendered markup means a click can land before hydration; retry. */
-async function openShare(page: Page) {
-  const field = page.getByLabel('Paste a proof record to replay it');
-  await expect(async () => {
-    if (!(await field.isVisible())) await page.getByRole('button', { name: 'Share' }).click();
-    await expect(field).toBeVisible({ timeout: 1000 });
-  }).toPass({ timeout: 15_000 });
-  return field;
 }
 
 async function applyTarget(page: Page, index = 0) {
@@ -398,7 +417,8 @@ const SOLVE_RECORD = {
 };
 
 test('a record with a whole-equation step replays into a finished proof', async ({ page }) => {
-  const field = await openShare(page);
+  await openMenu(page);
+  const field = page.getByLabel('Paste a proof record to replay it');
   await field.fill(JSON.stringify(SOLVE_RECORD));
   await page.getByRole('button', { name: 'Import and check' }).click();
 
@@ -413,18 +433,24 @@ test('a whole-equation step that has lost its term is refused', async ({ page })
     steps: [{ rule: 'left-multiply' }, ...SOLVE_RECORD.steps.slice(1)],
   };
 
-  const field = await openShare(page);
+  await openMenu(page);
+  const field = page.getByLabel('Paste a proof record to replay it');
   await field.fill(JSON.stringify(tampered));
   await page.getByRole('button', { name: 'Import and check' }).click();
 
   await expect(page.locator('.notice.is-error')).toContainText('needs a term');
-  expect(await stepCount(page), 'a refused import must not disturb the proof').toBe(0);
+  // A refused record opens nothing, so there is no proof screen to look at.
+  await expect(
+    page.getByRole('heading', { name: 'Choose something to prove' }),
+    'a refused import must not open anything',
+  ).toBeVisible();
 });
 
 test('the sheet says which kind of chain is being built, and what was achieved', async ({
   page,
 }) => {
-  // The opening challenge is an expression, so the wording is unchanged there.
+  // An expression challenge keeps the original wording.
+  await chooseChallenge(page, 'cancel-pairs');
   await expect(page.getByRole('heading', { name: 'Build an equality chain' })).toBeVisible();
 
   await chooseChallenge(page, 'solve-left');

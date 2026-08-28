@@ -46,7 +46,7 @@ export const CHALLENGES: Challenge[] = [
     label: '02',
     title: 'Put something in',
     blurb:
-      'Every step so far removed something. Multiplying by a term and its inverse changes nothing — and it is how most real proofs start.',
+      'Every step so far removed something. Multiplying by a term and its inverse changes nothing, so it is a way to bring in whatever a proof needs.',
     start: 'b',
     goal: 'a^-1 a b',
     rules: ['insert-inverse-pair', 'insert-identity', 'remove-identity', 'cancel-inverse'],

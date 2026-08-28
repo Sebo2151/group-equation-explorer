@@ -86,8 +86,10 @@ async function solve(page: Page) {
   await expect(page.getByText('Expression simplified')).toBeVisible();
 }
 
+// The app opens on the menu now, so these start at the opening challenge
+// directly rather than relying on what the app happens to load first.
 test.beforeEach(async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/#challenge=cancel-pairs');
   await expect(page.getByRole('heading', { name: 'Build an equality chain' })).toBeVisible();
 });
 

@@ -46,6 +46,19 @@ Associativity is still suppressed in the interface: products are flat, so
 students do not spend their time rearranging parentheses. Structure under an
 inverse or a power is kept, because that structure is mathematically meaningful.
 
+## The shell
+
+The app opens on a menu: the challenges in order, a form for starting from an
+expression of your own, a box for replaying a proof someone shared, and general
+help. The proof screen then carries only the proof, the laws, the controls that
+act on the proof, and a way back — everything else is a thing you do before a
+proof rather than during one.
+
+Navigation is by URL fragment, not by route: `#challenge=solve-left`, `#free`,
+`#help`, and the `#proof=…` that sharing already used. A challenge is therefore
+linkable and the back button works, without a router and without committing the
+static-hosting question to anything.
+
 ## Phase 3
 
 A proof line can now be an *equation* as well as an expression. A chain of
@@ -208,6 +221,7 @@ passes also remain open. See the audit record for the current gaps.
 - `app/catalogue.ts` — the two catalogues as one id space, and the dispatch that
   applies a term rule to one side of an equation
 - `app/challenges.ts` — challenge data, including each challenge's ruleset
+- `app/navigation.ts` — where the app is, encoded in the URL fragment
 - `app/proof.ts` — proof history as a DOM-free reducer, plus the replay verifier
 - `app/serialize.ts` — proof record export/import, LaTeX export, share links
 - `app/render.ts` — laying a line out as grid columns so brackets can span it;

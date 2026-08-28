@@ -251,7 +251,7 @@ out. Two things could not be verified on the implementing machine: the
 production build (a Dropbox lock on `dist/`) and any git operation (a `.git`
 ownership mismatch).
 
-### Phase 3 — Equation workbench: planned
+### Phase 3 — Equation workbench: implemented
 
 Add equations, local substitution on either side, left/right multiplication,
 inversion of both sides, symmetry, and equation-solving challenges. Clearly
@@ -259,6 +259,44 @@ distinguish local rewrites from whole-equation operations.
 
 Acceptance: each `iff` step has a reversible contract under the current assumptions;
 side and multiplication order are explicit; expression-chain behavior still works.
+
+Implemented on 2026-08-28. A proof line became a `Subject` — an expression or an
+equation — one level above `Term`, which let all fourteen existing laws apply to
+one side of an equation without change. Whole-equation laws carry no target and
+are offered as a control on the line rather than as a bracket beneath part of
+it, which is how the required distinction is made. Every law is checked by
+evaluation in S3 and D4 as well as structurally.
+
+Two things were decided here that the plan had left open. Goal matching is
+orientation sensitive, so symmetry remains a step that must be spent.
+Cancellation is a challenge rather than a law: it is derivable, so it is proved
+before it can be used, following the socks-and-shoes precedent. Note that
+evaluation cannot distinguish left from right multiplication — both are sound —
+so that distinction is asserted structurally instead.
+
+### Interface shell — prerequisite to Phase 4
+
+Before the curriculum grows, the app needs somewhere to put it. Phase 4 adds
+teaching modes, hints, unlocks, a proof viewer, personal bests and persistence;
+the single screen that carried Phase 3 already held the challenge picker, the
+free-exploration form, export and import, the proof and the law dock at once,
+and every one of those Phase 4 additions would have landed on top of it.
+
+The app therefore opens on a menu: choosing a challenge, starting an expression
+of your own, replaying a shared proof, and general help. The proof screen keeps
+only the proof, the laws, the controls that act on the proof, and a way back.
+Navigation is by URL fragment rather than by route, because sharing a proof
+already uses the fragment, because a linkable challenge and a working back
+button then come for free, and because it keeps a static export to one document
+while that distribution question is still open.
+
+Two invariants carry over into it: switching views must never discard a proof in
+progress, and a view change must move focus deliberately rather than dropping it.
+
+User-facing text was rewritten at the same time, away from a register aimed at
+whoever was reading the repository and towards what a student needs to know. A
+build note describing the current phase had been rendering to learners; it is
+gone.
 
 ### Phase 4 — Curriculum and progression: planned
 
