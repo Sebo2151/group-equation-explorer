@@ -9,7 +9,7 @@ import {
   FREE_CHALLENGE_ID,
   freeSetup,
 } from './challenges.ts';
-import { parseTerm, tryParseTerm } from './parse.ts';
+import { parseSubject, tryParseSubject } from './parse.ts';
 import {
   applyRule,
   canRedo,
@@ -26,12 +26,13 @@ import {
   type ProofState,
 } from './proof.ts';
 import {
-  columnCount,
-  layoutTerm,
-  placeTargets,
+  addressColumns,
+  layoutSubject,
+  placeAddresses,
+  subjectColumnCount,
   tokenColumn,
-  tokensInTarget,
-  type Layout,
+  tokensInAddress,
+  type SubjectLayout,
 } from './render.ts';
 import {
   ALL_RULES,
@@ -48,10 +49,11 @@ import {
   proofToLatex,
 } from './serialize.ts';
 import {
-  expression,
+  sideTerm,
   subjectSpeech,
   subjectTex,
   type Address,
+  type Side,
   type Subject,
 } from './subject.ts';
 import {
@@ -97,10 +99,11 @@ function Typeset({ tex, speech }: { tex: string; speech: string }) {
   );
 }
 
-function StaticExpression({ term }: { term: Term }) {
+/** A subject typeset as a single run, with no grid and no controls. */
+function StaticSubject({ subject }: { subject: Subject }) {
   return (
-    <span className="static-math" role="math" aria-label={termSpeech(term)}>
-      <span aria-hidden="true" dangerouslySetInnerHTML={mathHtml(termTex(term))} />
+    <span className="static-math" role="math" aria-label={subjectSpeech(subject)}>
+      <span aria-hidden="true" dangerouslySetInnerHTML={mathHtml(subjectTex(subject))} />
     </span>
   );
 }
@@ -119,7 +122,7 @@ function FactorRow({
   candidates,
   highlighted,
 }: {
-  layout: Layout;
+  layout: SubjectLayout;
   candidates?: Set<number>;
   highlighted?: Set<number>;
 }) {
@@ -146,14 +149,14 @@ function FactorRow({
 }
 
 /** A settled line: the same grid as the current one, without any controls. */
-function StaticStage({ term }: { term: Term }) {
-  const layout = useMemo(() => layoutTerm(term), [term]);
+function StaticStage({ subject }: { subject: Subject }) {
+  const layout = useMemo(() => layoutSubject(subject), [subject]);
 
   return (
     <span
       className="expression-stage"
       role="math"
-      aria-label={termSpeech(term)}
+      aria-label={subjectSpeech(subject)}
       style={{ gridTemplateColumns: gridColumns(layout) }}
     >
       <span className="factor-row">
@@ -163,28 +166,11 @@ function StaticStage({ term }: { term: Term }) {
   );
 }
 
-/**
- * A whole subject, typeset without controls.
- *
- * Equation lines take this path for now: the model and the rule catalogue
- * handle them, but the column grid that draws candidate brackets is still
- * single-expression, so an equation is shown rather than worked on. Nothing in
- * the interface can currently build one, so this is a guard against a state the
- * user cannot reach yet rather than a feature with a piece missing.
- */
-function StaticSubject({ subject }: { subject: Subject }) {
-  return (
-    <span className="static-math" role="math" aria-label={subjectSpeech(subject)}>
-      <span aria-hidden="true" dangerouslySetInnerHTML={mathHtml(subjectTex(subject))} />
-    </span>
-  );
-}
-
 /* ------------------------------------------------------------------ */
 /* The interactive line                                                */
 /* ------------------------------------------------------------------ */
 
-type ApplyRequest = { target: Target };
+type ApplyRequest = { address: Address };
 
 /**
  * The expression and its candidate controls share one grid, so a bracket spans
@@ -193,38 +179,46 @@ type ApplyRequest = { target: Target };
  * insertion points that fall at the same place at different depths, are
  * stacked onto separate rows rather than collapsed together.
  */
-function InteractiveExpression({
-  term,
+function InteractiveSubject({
+  subject,
   layout,
   rule,
-  targets,
+  addresses,
   onApply,
   blocked,
   firstTargetRef,
 }: {
-  term: Term;
-  layout: Layout;
+  subject: Subject;
+  layout: SubjectLayout;
   rule: AnyRuleDefinition;
-  targets: Target[];
+  addresses: Address[];
   onApply: (request: ApplyRequest) => void;
   blocked: string | null;
   firstTargetRef: React.RefObject<HTMLButtonElement | null>;
 }) {
-  const [active, setActive] = useState<Target | null>(null);
+  const [active, setActive] = useState<Address | null>(null);
   const stageRef = useRef<HTMLSpanElement | null>(null);
 
-  const placements = useMemo(() => placeTargets(layout, targets), [layout, targets]);
+  const placements = useMemo(() => placeAddresses(layout, addresses), [layout, addresses]);
   const highlighted = useMemo(
-    () => (active ? tokensInTarget(layout, active) : new Set<number>()),
+    () => (active ? tokensInAddress(layout, active) : new Set<number>()),
     [active, layout],
   );
   const candidates = useMemo(() => {
     const inside = new Set<number>();
-    for (const { target } of placements) {
-      for (const token of tokensInTarget(layout, target)) inside.add(token);
+    for (const { address } of placements) {
+      for (const token of tokensInAddress(layout, address)) inside.add(token);
     }
     return inside;
   }, [layout, placements]);
+
+  /**
+   * A law that acts on the line as a whole gets one control on the line, not a
+   * bracket under part of it. It has no span to cover and no position to be
+   * chosen among, so offering it through the candidate machinery would claim a
+   * choice of place that does not exist.
+   */
+  const wholeLine = rule.scope === 'equation' && addresses.some((a) => a.kind === 'equation');
 
   /**
    * Arrow keys move between candidates and a digit picks one directly, so a
@@ -258,42 +252,73 @@ function InteractiveExpression({
   };
 
   return (
-    <span
-      className="expression-stage"
-      onKeyDown={onKeyDown}
-      ref={stageRef}
-      style={{ gridTemplateColumns: gridColumns(layout) }}
-    >
-      <span className="factor-row" role="math" aria-label={termSpeech(term)}>
-        <FactorRow layout={layout} candidates={candidates} highlighted={highlighted} />
+    <>
+      <span
+        className="expression-stage"
+        onKeyDown={onKeyDown}
+        ref={stageRef}
+        style={{ gridTemplateColumns: gridColumns(layout) }}
+      >
+        <span className="factor-row" role="math" aria-label={subjectSpeech(subject)}>
+          <FactorRow layout={layout} candidates={candidates} highlighted={highlighted} />
+        </span>
+
+        {placements.map(({ address, columns, ordinal, layer }) => (
+          <button
+            aria-label={describeAddress(subject, rule, address, ordinal, placements.length)}
+            className={`target ${isGapAddress(address) ? 'is-insertion' : ''} ${
+              active && sameAddress(active, address) ? 'is-active' : ''
+            }`}
+            disabled={blocked !== null}
+            key={addressKey(address)}
+            onBlur={() => setActive(null)}
+            onClick={() => onApply({ address })}
+            onFocus={() => setActive(address)}
+            onMouseEnter={() => setActive(address)}
+            onMouseLeave={() => setActive(null)}
+            ref={ordinal === 1 ? firstTargetRef : undefined}
+            style={{ gridColumn: `${columns[0]} / ${columns[1] + 1}`, gridRow: layer + 2 }}
+            title={blocked ?? undefined}
+            type="button"
+          >
+            <span aria-hidden="true" className="target-bracket" />
+            <span aria-hidden="true" className="target-label">
+              {ordinal}
+            </span>
+          </button>
+        ))}
       </span>
 
-      {placements.map(({ target, columns, ordinal, layer }) => (
+      {wholeLine && (
         <button
-          aria-label={describeTarget(term, rule, target, ordinal, placements.length)}
-          className={`target ${isGap(target) ? 'is-insertion' : ''} ${
-            active && sameSpan(active, target) ? 'is-active' : ''
-          }`}
+          aria-label={`${rule.name}. Applies to the whole equation.`}
+          className="whole-line"
           disabled={blocked !== null}
-          key={`${target.path.join('.')}:${target.start}:${target.end}`}
-          onBlur={() => setActive(null)}
-          onClick={() => onApply({ target })}
-          onFocus={() => setActive(target)}
-          onMouseEnter={() => setActive(target)}
-          onMouseLeave={() => setActive(null)}
-          ref={ordinal === 1 ? firstTargetRef : undefined}
-          style={{ gridColumn: `${columns[0]} / ${columns[1] + 1}`, gridRow: layer + 2 }}
+          onClick={() => onApply({ address: { kind: 'equation' } })}
+          ref={firstTargetRef}
           title={blocked ?? undefined}
           type="button"
         >
-          <span aria-hidden="true" className="target-bracket" />
-          <span aria-hidden="true" className="target-label">
-            {ordinal}
-          </span>
+          <span aria-hidden="true">{rule.name} — whole equation</span>
         </button>
-      ))}
-    </span>
+      )}
+    </>
   );
+}
+
+function addressKey(address: Address): string {
+  if (address.kind === 'equation') return 'equation';
+  const { path, start, end } = address.target;
+  const where = address.kind === 'side' ? address.side : 'expression';
+  return `${where}:${path.join('.')}:${start}:${end}`;
+}
+
+function isGapAddress(address: Address): boolean {
+  return address.kind !== 'equation' && isGap(address.target);
+}
+
+function sameAddress(left: Address, right: Address): boolean {
+  return addressKey(left) === addressKey(right);
 }
 
 /**
@@ -302,8 +327,8 @@ function InteractiveExpression({
  * overhang into the padding either side of its column; reserving the bracket's
  * full width instead would push the factors apart for no reason.
  */
-function gridColumns(layout: Layout): string {
-  const total = columnCount(layout);
+function gridColumns(layout: SubjectLayout): string {
+  const total = subjectColumnCount(layout);
   return Array.from({ length: total }, (_, index) =>
     index % 2 === 0 ? 'var(--insert-column)' : 'auto',
   ).join(' ');
@@ -317,17 +342,35 @@ function sameSpan(left: Target, right: Target): boolean {
   );
 }
 
-function describeTarget(
-  term: Term,
+/**
+ * What a candidate control announces.
+ *
+ * On an equation the side is part of the description, and not for politeness:
+ * `a a^-1 = a a^-1` offers structurally identical spans on either side, and
+ * without the side their names would be identical. Two candidates that cannot
+ * be told apart is exactly what the one-control-per-candidate invariant exists
+ * to prevent. An expression has no sides, so its wording is unchanged.
+ */
+function describeAddress(
+  subject: Subject,
   rule: AnyRuleDefinition,
-  target: Target,
+  address: Address,
   ordinal: number,
   total: number,
 ): string {
-  const where = isGap(target)
-    ? describeGap(term, target)
-    : `at ${spanSpeech(spanTerms(term, target))}`;
-  return `${rule.name} ${where}. Option ${ordinal} of ${total}.`;
+  if (address.kind === 'equation') return `${rule.name}. Applies to the whole equation.`;
+
+  const term =
+    address.kind === 'side' && subject.kind === 'equation'
+      ? sideTerm(subject, address.side)
+      : (subject as { term: Term }).term;
+
+  const where = isGap(address.target)
+    ? describeGap(term, address.target)
+    : `at ${spanSpeech(spanTerms(term, address.target))}`;
+  const onSide = address.kind === 'side' ? `, on the ${address.side}` : '';
+
+  return `${rule.name} ${where}${onSide}. Option ${ordinal} of ${total}.`;
 }
 
 function describeGap(term: Term, target: Target): string {
@@ -360,14 +403,7 @@ function ProofLineView({
 
   return (
     <>
-      <div className="expression-slot">
-        {interactive ??
-          (subject.kind === 'expression' ? (
-            <StaticStage term={subject.term} />
-          ) : (
-            <StaticSubject subject={subject} />
-          ))}
-      </div>
+      <div className="expression-slot">{interactive ?? <StaticStage subject={subject} />}</div>
       {reason && (
         <div className="reason-slot">
           <button
@@ -396,7 +432,24 @@ const FAMILY_LABEL: Record<string, string> = {
   identity: 'Identity',
   inverse: 'Inverses',
   power: 'Powers',
+  equation: 'Whole equation',
 };
+
+/**
+ * How a law advertises where it can be used.
+ *
+ * A law that acts on the line as a whole has no places to count. Reporting it
+ * as "1 place" would claim a choice of location that does not exist, and would
+ * present it as the same kind of move as a local rewrite — which is exactly the
+ * distinction the interface has to keep. When the line is not an equation at
+ * all, the law is still shown, because the catalogue is meant to be visible;
+ * but it says what it needs rather than reporting zero places, since it is
+ * inapplicable in kind rather than merely unmatched here.
+ */
+function describeReach(rule: AnyRuleDefinition, count: number): string {
+  if (rule.scope !== 'equation') return `${count} ${count === 1 ? 'place' : 'places'}`;
+  return count > 0 ? 'whole equation' : 'needs an equation';
+}
 
 type Notice = { tone: 'ok' | 'error'; text: string } | null;
 
@@ -447,22 +500,16 @@ export default function Home() {
     [complete, line.subject, selectedRule],
   );
 
-  // The bracket grid is single-expression for now; see `StaticSubject`. An
-  // equation line still lays out its left side so the hook order and the grid
-  // variables stay constant, but it is shown statically rather than worked on.
-  const workedTerm = line.subject.kind === 'expression' ? line.subject.term : line.subject.left;
-  const workable = line.subject.kind === 'expression';
-  const layout = useMemo(() => layoutTerm(workedTerm), [workedTerm]);
-  const targets = useMemo(
-    () =>
-      workable
-        ? addresses.flatMap((address) => (address.kind === 'expression' ? [address.target] : []))
-        : [],
-    [addresses, workable],
-  );
+  const layout = useMemo(() => layoutSubject(line.subject), [line.subject]);
 
-  const insertParse = useMemo(() => tryParseTerm(insertSource, 'term'), [insertSource]);
-  const blocked = rule.needsTerm && !insertParse.ok ? 'Name a term to insert first.' : null;
+  const insertParse = useMemo(() => tryParseSubject(insertSource, 'term'), [insertSource]);
+  const blocked = rule.needsTerm
+    ? !insertParse.ok
+      ? 'Name a term to insert first.'
+      : insertParse.subject.kind === 'equation'
+        ? 'Insert a term, not an equation.'
+        : null
+    : null;
 
   /**
    * The sticky dock's height depends on how many laws the challenge permits,
@@ -507,7 +554,7 @@ export default function Home() {
     if (!moved.current) return;
     moved.current = false;
     (firstTargetRef.current ?? successRef.current ?? currentRef.current)?.focus({ preventScroll: true });
-  }, [proof, targets]);
+  }, [proof, addresses]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -548,14 +595,13 @@ export default function Home() {
   }, [open]);
 
   const apply = useCallback(
-    ({ target }: ApplyRequest) => {
+    ({ address }: ApplyRequest) => {
       const argument =
-        rule.needsTerm && insertParse.ok
-          ? { term: insertParse.term, ...(inverseFirst ? { inverseFirst: true } : {}) }
+        rule.needsTerm && insertParse.ok && insertParse.subject.kind === 'expression'
+          ? { term: insertParse.subject.term, ...(inverseFirst ? { inverseFirst: true } : {}) }
           : undefined;
 
       try {
-        const address: Address = { kind: 'expression', target };
         const next = applyRule(proof, selectedRule, address, argument);
         moved.current = true;
         setProof(next);
@@ -573,7 +619,7 @@ export default function Home() {
     if (isFree) lastFreeProof.current = proof;
     if (id === FREE_CHALLENGE_ID) {
       open(lastFreeProof.current ?? createProof(freeSetup(
-        expression(parseTerm(DEFAULT_FREE_START)), expression(parseTerm(DEFAULT_FREE_GOAL)),
+        parseSubject(DEFAULT_FREE_START), parseSubject(DEFAULT_FREE_GOAL),
       )));
       return;
     }
@@ -582,25 +628,33 @@ export default function Home() {
   };
 
   const startFree = () => {
-    const start = tryParseTerm(freeStart, 'expression');
+    const start = tryParseSubject(freeStart, 'expression');
     if (!start.ok) {
       setNotice({ tone: 'error', text: `Start: ${start.message}` });
       return;
     }
     const trimmedGoal = freeGoal.trim();
-    let goal: Term | null = null;
+    let goal: Subject | null = null;
     if (trimmedGoal.length > 0) {
-      const parsedGoal = tryParseTerm(trimmedGoal, 'goal');
+      const parsedGoal = tryParseSubject(trimmedGoal, 'goal');
       if (!parsedGoal.ok) {
         setNotice({ tone: 'error', text: `Goal: ${parsedGoal.message}` });
         return;
       }
-      goal = parsedGoal.term;
+      goal = parsedGoal.subject;
     }
-    open(
-      createProof(freeSetup(expression(start.term), goal === null ? null : expression(goal))),
-      { tone: 'ok', text: 'Free exploration ready.' },
-    );
+    // An equation may not be proved equal to an expression, and the reverse.
+    if (goal && goal.kind !== start.subject.kind) {
+      setNotice({
+        tone: 'error',
+        text: 'Start and goal must both be expressions, or both equations.',
+      });
+      return;
+    }
+    open(createProof(freeSetup(start.subject, goal)), {
+      tone: 'ok',
+      text: 'Free exploration ready.',
+    });
   };
 
   const copy = async (label: string, makeText: () => string) => {
@@ -823,23 +877,26 @@ export default function Home() {
                     tabIndex={isCurrent ? -1 : undefined}
                   >
                     <span className="relation" aria-hidden="true">
-                      {index === 0 ? '' : '='}
+                      {/* A chain of expressions is joined by equality; a chain
+                          of equations by equivalence, because each line is a
+                          statement rather than a quantity. */}
+                      {index === 0 ? '' : entry.subject.kind === 'equation' ? '\u21d4' : '='}
                     </span>
                     <ProofLineView
                       subject={entry.subject}
                       detail={entry.step?.detail}
                       reason={reasonsOpen ? entry.step?.reason : undefined}
                       interactive={
-                        isCurrent && !complete && entry.subject.kind === 'expression' ? (
-                          <InteractiveExpression
+                        isCurrent && !complete ? (
+                          <InteractiveSubject
+                            addresses={addresses}
                             blocked={blocked}
                             firstTargetRef={firstTargetRef}
                             key={`${stepCount(proof)}-${selectedRule}`}
                             layout={layout}
                             onApply={apply}
                             rule={rule}
-                            targets={targets}
-                            term={entry.subject.term}
+                            subject={entry.subject}
                           />
                         ) : null
                       }
@@ -876,14 +933,18 @@ export default function Home() {
                     <strong>{rule.name}</strong>
                     <span>
                       {addresses.length
-                        ? `${rule.description} ${addresses.length} ${
-                            addresses.length === 1 ? 'place' : 'places'
-                          } marked ${
-                            rule.scope === 'term' && rule.attachesToGaps
-                              ? 'between the factors'
-                              : 'below the expression'
-                          }.`
-                        : `${rule.description} It is still a true law — there is just nowhere to use it here. Try another law.`}
+                        ? rule.scope === 'equation'
+                          ? `${rule.description} It acts on the whole equation, not on a part of it.`
+                          : `${rule.description} ${addresses.length} ${
+                              addresses.length === 1 ? 'place' : 'places'
+                            } marked ${
+                              rule.attachesToGaps
+                                ? 'between the factors'
+                                : 'below the expression'
+                            }.`
+                        : rule.scope === 'equation'
+                          ? `${rule.description} This line is an expression, not an equation, so there is nothing for it to act on.`
+                          : `${rule.description} It is still a true law — there is just nowhere to use it here. Try another law.`}
                     </span>
                   </div>
                 </div>
@@ -934,7 +995,7 @@ export default function Home() {
                     const active = selectedRule === entry.id;
                     return (
                       <button
-                        aria-label={`${entry.name}, ${count} ${count === 1 ? 'place' : 'places'}`}
+                        aria-label={`${entry.name}, ${describeReach(entry, count)}`}
                         aria-pressed={active}
                         className={`rule-card ${active ? 'is-active' : ''}`}
                         key={entry.id}
@@ -944,7 +1005,7 @@ export default function Home() {
                         <span className="rule-topline">
                           <span className="rule-name">{entry.name}</span>
                           <span className={`candidate-count ${count ? '' : 'is-zero'}`}>
-                            {count} {count === 1 ? 'place' : 'places'}
+                            {describeReach(entry, count)}
                           </span>
                         </span>
                         <span className="rule-formula">
@@ -959,10 +1020,11 @@ export default function Home() {
           ))}
 
           <div className="phase-note">
-            <span>Phase 2</span>
+            <span>Phase 3</span>
             <p>
-              Associativity is working quietly: products are read without unnecessary parentheses,
-              and structure under an inverse or a power is kept.
+              A line can now be an equation. Laws that rewrite part of a line mark their targets
+              beneath it; laws that transform the statement as a whole are offered on the line
+              itself.
             </p>
           </div>
         </aside>
@@ -982,7 +1044,7 @@ function FieldPreview({ source, allowEmpty = false }: { source: string; allowEmp
     return <span className="field-preview is-muted">No goal — explore freely.</span>;
   }
 
-  const result = tryParseTerm(trimmed);
+  const result = tryParseSubject(trimmed);
   if (!result.ok) {
     return (
       <span className="field-preview is-error" role="status">
@@ -993,7 +1055,7 @@ function FieldPreview({ source, allowEmpty = false }: { source: string; allowEmp
 
   return (
     <span className="field-preview" role="status">
-      <StaticExpression term={result.term} />
+      <StaticSubject subject={result.subject} />
     </span>
   );
 }

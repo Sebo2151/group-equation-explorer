@@ -11,9 +11,10 @@
  * live without disturbing the spacing of the mathematics.
  */
 
+import { SIDES, type Address, type Side, type Subject } from './subject.ts';
 import { generatorTex, isGap, pathKey, type Path, type Target, type Term } from './term.ts';
 
-export type TokenKind = 'atom' | 'open' | 'close' | 'script';
+export type TokenKind = 'atom' | 'open' | 'close' | 'script' | 'relation';
 
 export type Token = {
   kind: TokenKind;
@@ -174,6 +175,140 @@ export function tokensInTarget(layout: Layout, target: Target): Set<number> {
   const inside = new Set<number>();
   const columns = targetColumns(layout, target);
   if (!columns || isGap(target)) return inside;
+
+  for (let index = 0; index < layout.tokens.length; index += 1) {
+    const column = tokenColumn(index);
+    if (column >= columns[0] && column <= columns[1]) inside.add(index);
+  }
+  return inside;
+}
+
+/* ------------------------------------------------------------------ */
+/* Subjects                                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A whole proof line laid out on one grid.
+ *
+ * An equation is two term layouts with a relation token between them, sharing a
+ * single column run. Each side keeps its own `Layout`, so its node paths and
+ * token indices stay local and `targetColumns` needs no notion of sides; the
+ * combined position is recovered by shifting.
+ *
+ * That shift is exact rather than approximate. A token at local index `i` sits
+ * in column `2i + 2` and a gap at boundary `b` in column `2b + 1`, so moving a
+ * side's tokens along by `offset` moves every column it owns — span and gap
+ * alike — by exactly `2 * offset`.
+ */
+export type SubjectPart = {
+  side: Side | null;
+  layout: Layout;
+  /** Index of this part's first token within the combined token list. */
+  offset: number;
+};
+
+export type SubjectLayout = {
+  tokens: Token[];
+  parts: SubjectPart[];
+};
+
+export function layoutSubject(subject: Subject): SubjectLayout {
+  if (subject.kind === 'expression') {
+    const layout = layoutTerm(subject.term);
+    return { tokens: layout.tokens, parts: [{ side: null, layout, offset: 0 }] };
+  }
+
+  const parts: SubjectPart[] = [];
+  const tokens: Token[] = [];
+
+  SIDES.forEach((side) => {
+    if (side === 'right') tokens.push({ kind: 'relation', tex: '=' });
+    const layout = layoutTerm(side === 'left' ? subject.left : subject.right);
+    parts.push({ side, layout, offset: tokens.length });
+    tokens.push(...layout.tokens);
+  });
+
+  return { tokens, parts };
+}
+
+export function subjectColumnCount(layout: SubjectLayout): number {
+  return layout.tokens.length * 2 + 1;
+}
+
+function partFor(layout: SubjectLayout, side: Side | null): SubjectPart | undefined {
+  return layout.parts.find((part) => part.side === side);
+}
+
+/**
+ * The grid columns an address covers, or `null` when it addresses nothing that
+ * is drawn. A whole-equation address covers nothing: it has no target, and
+ * under the Phase 3 interface it is offered as a control on the line rather
+ * than as a bracket beneath part of it.
+ */
+export function addressColumns(layout: SubjectLayout, address: Address): Range | null {
+  if (address.kind === 'equation') return null;
+
+  const part = partFor(layout, address.kind === 'side' ? address.side : null);
+  if (!part) return null;
+
+  const columns = targetColumns(part.layout, address.target);
+  if (!columns) return null;
+
+  const shift = 2 * part.offset;
+  return [columns[0] + shift, columns[1] + shift];
+}
+
+export type AddressPlacement = {
+  address: Address;
+  columns: Range;
+  /** Reading order across the whole line, one-based. */
+  ordinal: number;
+  /** Which row the control is drawn on; overlapping controls differ. */
+  layer: number;
+};
+
+/**
+ * Place every candidate so that no two controls overlap, numbering them in
+ * reading order across the whole line. On an equation that means the left
+ * side's candidates are numbered before the right side's, because that is the
+ * order the line is read in and the order the digit keys select in.
+ */
+export function placeAddresses(
+  layout: SubjectLayout,
+  addresses: Address[],
+): AddressPlacement[] {
+  const measured = addresses
+    .map((address) => ({ address, columns: addressColumns(layout, address) }))
+    .filter((entry): entry is { address: Address; columns: Range } => entry.columns !== null)
+    .sort(
+      (left, right) =>
+        left.columns[0] - right.columns[0] ||
+        left.columns[1] - right.columns[1] ||
+        pathDepth(left.address) - pathDepth(right.address),
+    );
+
+  const rowEnds: number[] = [];
+
+  return measured.map((entry, index) => {
+    let layer = rowEnds.findIndex((end) => end < entry.columns[0]);
+    if (layer === -1) layer = rowEnds.length;
+    rowEnds[layer] = entry.columns[1];
+
+    return { ...entry, ordinal: index + 1, layer };
+  });
+}
+
+function pathDepth(address: Address): number {
+  return address.kind === 'equation' ? 0 : address.target.path.length;
+}
+
+/** Whether a token is inside the given address, for highlighting. */
+export function tokensInAddress(layout: SubjectLayout, address: Address): Set<number> {
+  const inside = new Set<number>();
+  if (address.kind === 'equation') return inside;
+
+  const columns = addressColumns(layout, address);
+  if (!columns || isGap(address.target)) return inside;
 
   for (let index = 0; index < layout.tokens.length; index += 1) {
     const column = tokenColumn(index);

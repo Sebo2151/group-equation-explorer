@@ -46,6 +46,39 @@ Associativity is still suppressed in the interface: products are flat, so
 students do not spend their time rearranging parentheses. Structure under an
 inverse or a power is kept, because that structure is mathematically meaningful.
 
+## Phase 3a
+
+A proof line can now be an *equation* as well as an expression. A chain of
+expressions is joined by `=`; a chain of equations by `⟺`, because each line is
+a statement rather than a quantity.
+
+The model change is one level above the term: a line is a `Subject`, either an
+expression or an equation, and `Term` is untouched. An equation is not a term —
+it cannot sit under an inverse or be a factor in a product — so making it one
+would have forced every rule to guard a case that is never legal. Keeping `Term`
+closed is what lets all fourteen existing laws apply to one side of an equation
+without a line of rule logic being added.
+
+Two kinds of move are therefore possible on an equation, and the interface keeps
+them apart:
+
+- a **local rewrite** uses one of the existing laws on a sub-expression inside
+  one side, and marks its targets with brackets beneath the line exactly as it
+  always has. Candidates are numbered in reading order across the whole line,
+  left side before right, and each announces which side it is on — without that,
+  the two halves of `a a^-1 = a a^-1` would offer indistinguishable controls;
+- a **whole-equation law** transforms the statement itself. It has no target and
+  no place to be chosen among, so it is offered as a named control on the line
+  rather than as a bracket under part of it. `symmetry` is the first of these.
+
+Every whole-equation law declares a `direction`, and a test asserts that every
+one of them in this phase is an equivalence. The field exists now so that the
+one-way inference of Phase 6 does not need a record migration to gain it.
+
+Goal matching is orientation sensitive: reaching `v = u` when the goal is
+`u = v` leaves symmetry still to be applied. Making the two equal would hand out
+the step and remove the only reason symmetry is ever exercised.
+
 ### Notation
 
 Products are written by juxtaposition, with `*` and `·` accepted as optional
@@ -55,7 +88,14 @@ separators:
 ab          a b          a*b
 (ab)^-1 c   a^3          a^-2        (a^2)^3
 r2 s        e
+a x = b     (a b)^-1 = b^-1 a^-1
 ```
+
+A single `=` makes the line an equation. The relation is recognised outside the
+term grammar, so it cannot appear inside parentheses, under an inverse, or in an
+exponent; a line with two of them is refused. In free exploration the start and
+the goal must agree about being equations — an equation is not provably equal to
+an expression.
 
 A generator is one letter followed by any digits, so `r2` is a generator and
 `a^2` is a power; juxtaposition is never ambiguous. `e` is the identity and may
@@ -86,8 +126,15 @@ longer proofs.
 
 ### What is still not implemented
 
-No equation mode, implication mode, custom relations or presentations, unlock
-system, hints, progress storage, or personal bests. Those are Phases 3 to 6.
+The whole-equation catalogue holds only `symmetry` so far. Left and right
+multiplication, inverting both sides, and the equation-solving challenges are
+Phase 3b, along with a finite-group evaluator to catch any rule that has
+quietly assumed commutativity.
+
+No implication mode, custom relations or presentations, unlock system, hints,
+progress storage, or personal bests. Those are Phases 4 to 6. Cancellation will
+be a challenge rather than a built-in law: it is derivable, and proving it
+before using it is the point.
 
 ## Run locally
 
@@ -133,13 +180,21 @@ passes also remain open. See the audit record for the current gaps.
 - `app/term.ts` — the recursive term model: construction with associative
   flattening, structural equality, paths, spans and gaps, validation, and the
   TeX, spoken, and source renderings
+- `app/subject.ts` — what a proof line is about: an expression or an equation,
+  plus the address that says where on the line a law was used
 - `app/parse.ts` — the restricted parser and its error reporting
-- `app/rules.ts` — the rule catalogue: matching and rewriting defined together,
-  one entry per rule
+- `app/rules.ts` — the term rule catalogue: matching and rewriting defined
+  together, one entry per rule
+- `app/equation-rules.ts` — laws that act on a line as a whole, each declaring
+  whether its converse also holds
+- `app/catalogue.ts` — the two catalogues as one id space, and the dispatch that
+  applies a term rule to one side of an equation
 - `app/challenges.ts` — challenge data, including each challenge's ruleset
 - `app/proof.ts` — proof history as a DOM-free reducer, plus the replay verifier
 - `app/serialize.ts` — proof record export/import, LaTeX export, share links
-- `app/render.ts` — laying a term out as grid columns so brackets can span it
+- `app/render.ts` — laying a line out as grid columns so brackets can span it;
+  an equation is two term layouts either side of a relation token, sharing one
+  column run
 - `app/page.tsx` — React interaction and typesetting
 - `app/globals.css` — visual system and responsive layout
 - `tests/*.test.ts` — Node tests for each module above

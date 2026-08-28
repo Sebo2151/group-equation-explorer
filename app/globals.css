@@ -165,6 +165,10 @@ h2 { margin-bottom: 0; font-size: 1.05rem; letter-spacing: -0.015em; }
 .factor.is-atom { min-width: 34px; padding-inline: 6px; }
 .factor.is-open, .factor.is-close { padding-inline: 0; }
 .factor.is-script { padding-inline: 0; margin-left: -1px; }
+/* The relation belongs to the mathematics, so it is set in ink rather than
+   muted. It is never a candidate: no rule addresses it and no bracket covers
+   it, which is why it needs room either side but no target width. */
+.factor.is-relation { min-width: 30px; padding-inline: 11px; color: var(--ink); }
 .factor.is-candidate { background: rgba(240, 180, 60, 0.13); }
 .factor.is-active { background: var(--gold-soft); color: #70450d; }
 
@@ -203,6 +207,31 @@ h2 { margin-bottom: 0; font-size: 1.05rem; letter-spacing: -0.015em; }
 }
 .target:hover .target-bracket, .target.is-active .target-bracket { background: var(--gold-soft); border-color: #d99a1c; }
 .target:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; border-radius: 7px; }
+
+/* A law that acts on the line as a whole is not a bracket over part of it.
+   Symmetry has no span to cover and no position to be chosen among, so it is
+   offered as a named control on the line: words rather than an ordinal, a pill
+   rather than a bracket. The difference in shape is the point — it is what
+   stops a whole-equation move reading as another local rewrite. */
+.whole-line {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  margin-top: 9px;
+  border: 2px solid var(--blue);
+  border-radius: 999px;
+  background: var(--blue-soft);
+  color: var(--blue-deep);
+  padding: 0 15px;
+  font-family: Inter, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 850;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.whole-line:hover:not(:disabled) { border-color: var(--blue-deep); background: #cfe0ff; }
+.whole-line:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+.whole-line:disabled { cursor: not-allowed; opacity: 0.45; }
 
 .reason-slot { display: grid; justify-items: start; gap: 4px; }
 .reason { display: inline-flex; align-items: center; gap: 5px; min-height: 34px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255, 255, 255, 0.7); color: var(--muted); padding: 0 10px; font-size: 0.73rem; cursor: pointer; white-space: nowrap; }
@@ -396,6 +425,7 @@ footer p { margin: 0; }
   .expression-slot { padding-inline: 5px; }
   .factor.is-atom { min-width: 33px; padding-inline: 4px; }
   .target { min-height: 44px; margin: 0 1px; }
+  .whole-line { min-height: 44px; }
   .target-bracket { height: 11px; }
   .rule-topline { align-items: flex-start; }
   .candidate-count { white-space: nowrap; }
