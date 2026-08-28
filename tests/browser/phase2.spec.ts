@@ -299,6 +299,29 @@ test('free exploration parses input and refuses what it cannot read', async ({ p
   await expect(page.locator('.status-pill')).toContainText('0 steps');
 });
 
+for (const label of ['Start from', 'Goal (optional)']) {
+  test(`an invalid ${label} draft can be reopened and repaired`, async ({ page }) => {
+    await chooseChallenge(page, 'free');
+    await page.getByLabel('Start from').fill('a a^-1 b');
+    await page.getByLabel('Goal (optional)').fill('');
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
+    await applyTarget(page);
+    const committed = await currentLine(page);
+
+    await page.getByLabel(label).fill('(');
+    await chooseChallenge(page, 'powers');
+    await chooseChallenge(page, 'free');
+    await expect(page.getByLabel(label)).toHaveValue('(');
+    expect(await currentLine(page)).toBe(committed);
+    expect(await stepCount(page)).toBe(1);
+
+    await page.getByLabel(label).fill('b');
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
+    expect(await stepCount(page)).toBe(0);
+    await expect(page.locator('.notice.is-error')).toHaveCount(0);
+  });
+}
+
 test('no accessible name contains TeX, on a nested expression with powers', async ({ page }) => {
   await chooseChallenge(page, 'free');
   await page.getByLabel('Start from').fill('((a b^-1)^2 c)^-1 r2^-3');
@@ -409,10 +432,71 @@ test('ctrl+z undoes and ctrl+shift+z redoes', async ({ page }) => {
   expect(await stepCount(page)).toBe(1);
 });
 
+for (const label of ['Start from', 'Goal (optional)', 'Insert this term', 'Paste a proof record to replay it']) {
+  test(`native text undo and redo in ${label} leave the proof alone`, async ({ page }) => {
+    if (label === 'Insert this term') {
+      await chooseChallenge(page, 'insert-a-pair');
+    } else if (label !== 'Paste a proof record to replay it') {
+      await chooseChallenge(page, 'free');
+      await page.getByLabel('Start from').fill('a a^-1 b');
+      await page.getByRole('button', { name: 'Start', exact: true }).click();
+    }
+    await applyTarget(page);
+    const committed = await currentLine(page);
+    if (label === 'Paste a proof record to replay it') await openShare(page);
+
+    const field = page.getByLabel(label);
+    await field.fill('');
+    await field.pressSequentially('abc');
+    await field.press('Control+z');
+    await expect(field).not.toHaveValue('abc');
+    expect(await stepCount(page)).toBe(1);
+    expect(await currentLine(page)).toBe(committed);
+    await field.press('Control+Shift+z');
+    await expect(field).toHaveValue('abc');
+    expect(await stepCount(page)).toBe(1);
+  });
+}
+
 /* Narrow viewport -------------------------------------------------------- */
 
 test.describe('narrow viewport', () => {
   test.skip(({ viewport }) => (viewport?.width ?? 0) > 500, 'phone project only');
+
+  test('switching to a taller dock immediately keeps the new proof visible', async ({ page }) => {
+    const openingHeight = (await page.locator('.rules-card').boundingBox())!.height;
+    await chooseChallenge(page, 'free');
+    await scrollSettled(page);
+    const dock = (await page.locator('.rules-card').boundingBox())!;
+    const current = (await page.locator('.proof-line.is-current').boundingBox())!;
+    expect(dock.height).toBeGreaterThan(openingHeight);
+    expect(current.y).toBeGreaterThanOrEqual(0);
+    expect(current.y + current.height).toBeLessThanOrEqual(dock.y);
+  });
+
+  for (const width of [390, 320]) {
+    test(`long previews scroll locally at ${width}px without widening the page`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 844 });
+      const pageFits = () => page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      );
+      expect(await pageFits(), 'the challenge picker must fit too').toBe(true);
+      await chooseChallenge(page, 'free');
+      for (const label of ['Start from', 'Goal (optional)']) {
+        await page.getByLabel(label).fill('a'.repeat(40));
+        expect(await pageFits()).toBe(true);
+      }
+      const preview = page.locator('.free-field .field-preview').first();
+      expect(await preview.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+
+      await selectLaw(page, 'Insert inverse pair');
+      await page.getByLabel('Insert this term').fill('a'.repeat(40));
+      expect(await pageFits()).toBe(true);
+      expect(await page.locator('.instantiation .field-preview').evaluate(
+        (el) => el.scrollWidth > el.clientWidth,
+      )).toBe(true);
+    });
+  }
 
   test('the dock still clears the active line with the whole catalogue open', async ({ page }) => {
     // Free exploration permits every law, so the dock is at its tallest — far

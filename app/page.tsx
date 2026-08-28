@@ -9,7 +9,7 @@ import {
   FREE_CHALLENGE_ID,
   freeSetup,
 } from './challenges.ts';
-import { tryParseTerm } from './parse.ts';
+import { parseTerm, tryParseTerm } from './parse.ts';
 import {
   applyRule,
   canRedo,
@@ -315,6 +315,14 @@ const FAMILY_LABEL: Record<string, string> = {
 
 type Notice = { tone: 'ok' | 'error'; text: string } | null;
 
+const DEFAULT_FREE_START = '(ab)^-1 a b';
+const DEFAULT_FREE_GOAL = 'e';
+
+function isEditingText(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement &&
+    (target.isContentEditable || target.closest('input, textarea, select') !== null);
+}
+
 function steps(count: number): string {
   return `${count} ${count === 1 ? 'step' : 'steps'}`;
 }
@@ -325,8 +333,8 @@ export default function Home() {
   const [reasonsOpen, setReasonsOpen] = useState(true);
   const [insertSource, setInsertSource] = useState('a');
   const [inverseFirst, setInverseFirst] = useState(false);
-  const [freeStart, setFreeStart] = useState('(ab)^-1 a b');
-  const [freeGoal, setFreeGoal] = useState('e');
+  const [freeStart, setFreeStart] = useState(DEFAULT_FREE_START);
+  const [freeGoal, setFreeGoal] = useState(DEFAULT_FREE_GOAL);
   const [importText, setImportText] = useState('');
   const [shareOpen, setShareOpen] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
@@ -336,6 +344,7 @@ export default function Home() {
   const firstTargetRef = useRef<HTMLButtonElement | null>(null);
   const successRef = useRef<HTMLDivElement | null>(null);
   const moved = useRef(false);
+  const lastFreeProof = useRef<ProofState | null>(null);
 
   const line = currentLine(proof);
   const complete = isComplete(proof);
@@ -355,34 +364,36 @@ export default function Home() {
   /**
    * The sticky dock's height depends on how many laws the challenge permits,
    * so the band reserved for it under the proof sheet cannot be a constant.
-   * Measure the dock and publish it as `--dock-height`, which the narrow
-   * layout uses for both padding and scroll margin.
+   * Measure before scrolling a new proof into view, and repeat if the dock
+   * resizes later (for example when an insertion field opens). Updating only
+   * the scroll margin after scrolling leaves the line behind the new dock.
    */
   useEffect(() => {
     const dock = dockRef.current;
     if (!dock) return;
 
-    const sync = () =>
+    let previousHeight = -1;
+    const sync = () => {
+      const height = Math.ceil(dock.getBoundingClientRect().height);
+      if (height === previousHeight) return;
+      previousHeight = height;
       document.documentElement.style.setProperty(
         '--dock-height',
-        `${Math.ceil(dock.getBoundingClientRect().height)}px`,
+        `${height}px`,
       );
+
+      // A changing preview must not pull the learner away from their input.
+      if (dock.contains(document.activeElement) && isEditingText(document.activeElement)) return;
+      (successRef.current ?? currentRef.current)?.scrollIntoView({
+        block: 'nearest',
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+      });
+    };
 
     sync();
     const observer = new ResizeObserver(sync);
     observer.observe(dock);
     return () => observer.disconnect();
-  }, []);
-
-  // Keep whatever just changed visible: on a narrow screen the rule dock is
-  // sticky and would otherwise sit over it once the proof grows past the fold.
-  // On the final move the success note sits below the line, so it — not the
-  // line — is what has to clear the dock.
-  useEffect(() => {
-    (successRef.current ?? currentRef.current)?.scrollIntoView({
-      block: 'nearest',
-      behavior: 'smooth',
-    });
   }, [proof, complete]);
 
   // A committed move unmounts the control that was clicked, which drops focus
@@ -392,11 +403,12 @@ export default function Home() {
   useEffect(() => {
     if (!moved.current) return;
     moved.current = false;
-    (firstTargetRef.current ?? successRef.current ?? currentRef.current)?.focus();
+    (firstTargetRef.current ?? successRef.current ?? currentRef.current)?.focus({ preventScroll: true });
   }, [proof, targets]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || isEditingText(event.target)) return;
       if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z') return;
       event.preventDefault();
       setProof(event.shiftKey ? redo : undo);
@@ -452,8 +464,13 @@ export default function Home() {
   );
 
   const chooseChallenge = (id: string) => {
+    // Draft text is independent of the last successfully started proof. In
+    // particular, leaving an invalid draft must not prevent reopening it.
+    if (isFree) lastFreeProof.current = proof;
     if (id === FREE_CHALLENGE_ID) {
-      startFree();
+      open(lastFreeProof.current ?? createProof(freeSetup(
+        parseTerm(DEFAULT_FREE_START), parseTerm(DEFAULT_FREE_GOAL),
+      )));
       return;
     }
     const found = challengeById(id);
@@ -479,7 +496,14 @@ export default function Home() {
     open(createProof(freeSetup(start.term, goal)), { tone: 'ok', text: 'Free exploration ready.' });
   };
 
-  const copy = async (label: string, text: string) => {
+  const copy = async (label: string, makeText: () => string) => {
+    let text: string;
+    try {
+      text = makeText();
+    } catch (error) {
+      setNotice({ tone: 'error', text: (error as Error).message });
+      return;
+    }
     try {
       await navigator.clipboard.writeText(text);
       setNotice({ tone: 'ok', text: `${label} copied to the clipboard.` });
@@ -497,7 +521,7 @@ export default function Home() {
       });
       return;
     }
-    void copy('Link', `${window.location.origin}${window.location.pathname}${hash}`);
+    void copy('Link', () => `${window.location.origin}${window.location.pathname}${hash}`);
   };
 
   const runImport = () => {
@@ -594,10 +618,10 @@ export default function Home() {
       {shareOpen && (
         <section className="share-card" aria-label="Export and import">
           <div className="share-actions">
-            <button className="tool-button" type="button" onClick={() => copy('Proof record', proofToJson(proof))}>
+            <button className="tool-button" type="button" onClick={() => copy('Proof record', () => proofToJson(proof))}>
               Copy proof record
             </button>
-            <button className="tool-button" type="button" onClick={() => copy('LaTeX', proofToLatex(proof))}>
+            <button className="tool-button" type="button" onClick={() => copy('LaTeX', () => proofToLatex(proof))}>
               Copy LaTeX
             </button>
             <button className="tool-button" type="button" onClick={copyLink}>

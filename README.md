@@ -63,6 +63,11 @@ not name a generator. `a^1` and `a^-1` are notation for the term and its
 inverse, not extra structure. Repeated powers need parentheses. Input is length,
 depth, exponent, and node limited, and is never evaluated.
 
+Free exploration keeps its draft and last started proof when switching to a
+challenge and back, including unfinished or invalid draft text. Press **Start**
+to replace that proof with the edited expression. While typing in a field,
+Ctrl/Cmd+Z and redo edit the text; outside fields, they navigate proof history.
+
 ### Rules and challenges
 
 Every rule in the catalogue is a theorem of any group. Whether a *challenge* may
@@ -70,6 +75,14 @@ use it is separate: each challenge names its permitted rules, and that ruleset
 travels with the proof. A challenge that establishes a lemma must not list that
 lemma among its tools, and an imported proof claiming a challenge is rejected if
 it used tools that challenge forbids.
+
+Imports preserve the recorded ruleset for free and unknown challenges too.
+Editor input is limited to 240 characters; serialized expressions may use the
+20,000-character record budget because canonical notation adds spaces. The
+grammar, structural limits, and maximum generator-name length remain enforced.
+JSON export uses compact formatting when needed to fit that same record budget,
+and refuses records that still cannot be reopened. LaTeX remains available for
+longer proofs.
 
 ### What is still not implemented
 

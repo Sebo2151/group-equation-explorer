@@ -115,6 +115,8 @@ test('exponent magnitude is bounded', () => {
 
 test('nesting depth is bounded', () => {
   assert.throws(() => parsed('('.repeat(40) + 'a' + ')'.repeat(40)), /nested deeper/);
+  // Powers add a tree level that isn't counted by parenthesis nesting alone.
+  assert.throws(() => parsed('('.repeat(15) + 'a^-1' + ')^-1'.repeat(15)), /nested deeper/);
 });
 
 test('nothing that looks like a TeX command survives', () => {

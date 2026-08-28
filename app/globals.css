@@ -78,6 +78,7 @@ h2 { margin-bottom: 0; font-size: 1.05rem; letter-spacing: -0.015em; }
   box-shadow: 0 8px 30px rgba(36, 29, 18, 0.06);
 }
 .challenge-number { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 50%; background: var(--blue-soft); color: var(--blue-deep); font-size: 0.82rem; font-weight: 900; }
+.challenge-copy { min-width: 0; }
 .challenge-copy h2 { margin-bottom: 2px; font-size: 1.02rem; }
 .challenge-copy p:last-child { margin: 0; color: var(--muted); font-size: 0.86rem; }
 .status-pill { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 999px; padding: 7px 10px; color: var(--muted); font-size: 0.77rem; font-weight: 800; white-space: nowrap; }
@@ -287,8 +288,8 @@ h2 { margin-bottom: 0; font-size: 1.05rem; letter-spacing: -0.015em; }
 
 .free-card { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; }
 .free-card .free-note { grid-column: 1 / -1; }
-.free-field { display: grid; gap: 6px; }
-.field-preview { min-height: 26px; color: var(--ink); font-size: 1.05rem; }
+.free-field { display: grid; min-width: 0; gap: 6px; }
+.field-preview { display: block; min-width: 0; max-width: 100%; overflow-x: auto; min-height: 26px; color: var(--ink); font-size: 1.05rem; }
 .field-preview.is-error { color: #94391c; font-size: 0.74rem; line-height: 1.4; }
 .field-preview.is-muted { color: var(--muted); font-size: 0.74rem; }
 

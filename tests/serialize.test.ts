@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { challengeSetup, challengeById } from '../app/challenges.ts';
-import { parseTerm } from '../app/parse.ts';
-import { applyRule, createProof, isComplete, visibleLines, type ProofState } from '../app/proof.ts';
+import { challengeSetup, challengeById, freeSetup } from '../app/challenges.ts';
+import { MAX_INPUT_LENGTH, parseTerm } from '../app/parse.ts';
+import { applyRule, createProof, isComplete, MAX_STEPS, visibleLines, type ProofState } from '../app/proof.ts';
 import {
   exportProof,
   importProof,
@@ -15,7 +15,7 @@ import {
   proofToJson,
   proofToLatex,
 } from '../app/serialize.ts';
-import { termSource } from '../app/term.ts';
+import { MAX_NODES, termSource } from '../app/term.ts';
 
 function solvedOpening(): ProofState {
   let proof = createProof(challengeSetup(challengeById('cancel-pairs')!));
@@ -72,6 +72,46 @@ test('nested structure survives the round trip', () => {
   assert.deepEqual(chain(restored), ['(a b^-1)^-1', '(b^-1)^-1 a^-1']);
 });
 
+test('canonical source longer than editor input survives records and links', () => {
+  const start = parseTerm('a'.repeat(121));
+  const opening = createProof(freeSetup(start));
+  assert.ok(termSource(start).length > MAX_INPUT_LENGTH);
+  assert.deepEqual(chain(proofFromHash(proofToHash(opening)!)!), chain(opening));
+
+  const proof = applyRule(
+    createProof(freeSetup(start, parseTerm('b'.repeat(121)))),
+    'insert-inverse-pair',
+    { path: [], start: 0, end: -1 },
+    { term: parseTerm('c'.repeat(121)) },
+  );
+  assert.deepEqual(importProof(proofToJson(proof)), proof);
+});
+
+test('a maximum-length nested proof uses compact JSON when formatting exceeds the limit', () => {
+  let proof = createProof(freeSetup(parseTerm('a^-1')));
+  for (let index = 0; index < MAX_STEPS; index += 1) {
+    proof = applyRule(proof, index % 2 ? 'remove-identity' : 'insert-identity', {
+      path: [0], start: 0, end: index % 2 ? 0 : -1,
+    });
+  }
+  assert.ok(JSON.stringify(exportProof(proof), null, 2).length > MAX_IMPORT_CHARACTERS);
+  const exported = proofToJson(proof);
+  assert.ok(exported.length <= MAX_IMPORT_CHARACTERS);
+  assert.deepEqual(importProof(exported), proof);
+});
+
+test('a record too large even without formatting is refused at export', () => {
+  let proof = createProof(freeSetup(parseTerm('a')));
+  const argument = { term: parseTerm(`r${'2'.repeat(MAX_INPUT_LENGTH - 1)}`) };
+  for (let index = 0; index < Math.floor(MAX_STEPS / 3); index += 1) {
+    proof = applyRule(proof, 'insert-inverse-pair', { path: [], start: 0, end: -1 }, argument);
+    proof = applyRule(proof, 'cancel-inverse', { path: [], start: 0, end: 1 });
+    proof = applyRule(proof, 'remove-identity', { path: [], start: 0, end: 0 });
+  }
+  assert.throws(() => proofToJson(proof), /too long to export/);
+  assert.equal(proofToHash(proof), null);
+});
+
 test('the exported record carries the ruleset it was built with', () => {
   const record = exportProof(solvedOpening());
   assert.equal(record.format, PROOF_FORMAT);
@@ -101,6 +141,16 @@ test('import is size limited before any parsing work', () => {
   assert.throws(() => importProof('x'.repeat(MAX_IMPORT_CHARACTERS + 1)), /longer than/);
 });
 
+test('the larger record text budget does not bypass structural limits', () => {
+  const record = exportProof(createProof(freeSetup(parseTerm('a'))));
+  record.start = 'a '.repeat(MAX_NODES);
+  assert.throws(() => importProof(JSON.stringify(record)), /more than .* parts/);
+  record.start = '('.repeat(40) + 'a' + ')'.repeat(40);
+  assert.throws(() => importProof(JSON.stringify(record)), /nested deeper/);
+  record.start = `r${'2'.repeat(MAX_INPUT_LENGTH)}`;
+  assert.throws(() => importProof(JSON.stringify(record)), /Generator name is longer than/);
+});
+
 test('a tampered step is caught by replay, not by its label', () => {
   const record = exportProof(solvedOpening());
   // The label still says "Inverse law"; the target no longer cancels anything.
@@ -112,6 +162,20 @@ test('a step naming a rule outside the recorded ruleset is refused', () => {
   const record = exportProof(solvedOpening());
   record.steps[0] = { rule: 'inverse-of-product', path: [], start: 0, end: 0 };
   assert.throws(() => importProof(JSON.stringify(record)), /Step 1/);
+});
+
+test('free and unknown challenge imports preserve and enforce their recorded ruleset', () => {
+  for (const challenge of ['free', 'someone-elses-challenge']) {
+    const record = exportProof(createProof({
+      challenge, start: parseTerm('a'), goal: null, ruleset: ['cancel-inverse'],
+    }));
+    assert.deepEqual(importProof(JSON.stringify(record)).ruleset, record.ruleset);
+    record.steps = [{ rule: 'insert-identity', path: [], start: 0, end: -1 }];
+    assert.throws(() => importProof(JSON.stringify(record)), /Step 1 .*not available/);
+    record.ruleset = [];
+    record.steps = [];
+    assert.throws(() => importProof(JSON.stringify(record)), /at least one permitted rule/);
+  }
 });
 
 test('a record cannot claim a challenge while using tools it forbids', () => {

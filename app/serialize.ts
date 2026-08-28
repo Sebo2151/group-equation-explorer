@@ -7,7 +7,7 @@
  * and step limits are applied before any of that work begins.
  */
 
-import { challengeById, challengeSetup, freeSetup, type ChallengeSetup } from './challenges.ts';
+import { challengeById, challengeSetup, type ChallengeSetup } from './challenges.ts';
 import { parseTerm } from './parse.ts';
 import {
   createProof,
@@ -69,7 +69,16 @@ export function exportProof(state: ProofState): ProofRecord {
 }
 
 export function proofToJson(state: ProofState): string {
-  return `${JSON.stringify(exportProof(state), null, 2)}\n`;
+  const record = exportProof(state);
+  const pretty = `${JSON.stringify(record, null, 2)}\n`;
+  if (pretty.length <= MAX_IMPORT_CHARACTERS) return pretty;
+
+  // Formatting must not prevent an otherwise readable proof from reopening.
+  const compact = JSON.stringify(record);
+  if (compact.length <= MAX_IMPORT_CHARACTERS) return compact;
+  throw new RangeError(
+    `This proof is too long to export as a replayable record (${MAX_IMPORT_CHARACTERS} characters maximum). Undo some steps or copy LaTeX instead.`,
+  );
 }
 
 /**
@@ -164,8 +173,11 @@ function validateStepRecord(value: unknown, index: number): StepRecord {
 }
 
 function replayRecord(record: ProofRecord): ProofState {
-  const start = parseTerm(record.start, 'starting expression');
-  const goal = record.goal === null ? null : parseTerm(record.goal, 'goal');
+  // Canonical source adds spaces and may exceed the editor's 240 characters.
+  // The entire record has already passed its size limit; the parser still
+  // enforces the same grammar, exponent, depth, and node bounds.
+  const start = parseTerm(record.start, 'starting expression', MAX_IMPORT_CHARACTERS);
+  const goal = record.goal === null ? null : parseTerm(record.goal, 'goal', MAX_IMPORT_CHARACTERS);
   const setup = challengeSetupFor(record, start, goal);
 
   return replayProof(
@@ -177,7 +189,7 @@ function replayRecord(record: ProofRecord): ProofState {
         ? {}
         : {
             argument: {
-              term: parseTerm(step.term, `step term "${step.term}"`),
+              term: parseTerm(step.term, 'step term', MAX_IMPORT_CHARACTERS),
               ...(step.inverseFirst ? { inverseFirst: true } : {}),
             } satisfies RuleArgument,
           }),
@@ -193,7 +205,7 @@ function replayRecord(record: ProofRecord): ProofState {
  */
 function challengeSetupFor(record: ProofRecord, start: Term, goal: Term | null): ChallengeSetup {
   const challenge = challengeById(record.challenge);
-  if (!challenge) return { ...freeSetup(start, goal), challenge: record.challenge };
+  if (!challenge) return { challenge: record.challenge, start, goal, ruleset: record.ruleset };
 
   const declared = challengeSetup(challenge);
 

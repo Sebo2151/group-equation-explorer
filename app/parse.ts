@@ -27,6 +27,7 @@ import {
   nodeCount,
   power,
   product,
+  termDepth,
   type Term,
 } from './term.ts';
 
@@ -100,12 +101,17 @@ class Reader {
   }
 }
 
-export function parseTerm(text: unknown, where = 'expression'): Term {
+/** Record imports may use their enclosing record's text budget instead of the editor limit. */
+export function parseTerm(
+  text: unknown,
+  where = 'expression',
+  maxLength = MAX_INPUT_LENGTH,
+): Term {
   if (typeof text !== 'string') {
     throw new ParseError(`${where} must be text.`, 0);
   }
-  if (text.length > MAX_INPUT_LENGTH) {
-    throw new ParseError(`${where} is longer than ${MAX_INPUT_LENGTH} characters.`, MAX_INPUT_LENGTH);
+  if (text.length > maxLength) {
+    throw new ParseError(`${where} is longer than ${maxLength} characters.`, maxLength);
   }
 
   const reader = new Reader(text);
@@ -120,8 +126,11 @@ export function parseTerm(text: unknown, where = 'expression'): Term {
     );
   }
 
-  // Depth is enforced as the parser descends; the node budget can only be
-  // known once the whole term exists.
+  // Parenthesis depth is bounded during parsing; check the actual tree too,
+  // since powers and products add levels without adding parentheses.
+  if (termDepth(term) > MAX_DEPTH) {
+    throw new ParseError(`${where} is nested deeper than ${MAX_DEPTH} levels.`, 0);
+  }
   if (nodeCount(term) > MAX_NODES) {
     throw new ParseError(`${where} has more than ${MAX_NODES} parts.`, 0);
   }
@@ -205,6 +214,11 @@ function readAtom(reader: Reader, depth: number): Term {
     reader.next();
     while (isDigit(reader.peek())) reader.next();
     const name = reader.slice(start);
+    // A larger serialized record budget must not permit larger individual
+    // symbols than the editor can create (and power expansion can duplicate).
+    if (name.length > MAX_INPUT_LENGTH) {
+      reader.fail(`Generator name is longer than ${MAX_INPUT_LENGTH} characters.`, start);
+    }
 
     // `e` is the identity, so no generator may be spelled with it — including
     // `e2`, which would be indistinguishable from the identity on screen.
