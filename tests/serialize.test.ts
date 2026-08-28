@@ -288,3 +288,80 @@ test('LaTeX reason text is restricted to a safe set', () => {
     assert.doesNotMatch(match[1], /[\\{}$&#^_~%]/, `unsafe text reached LaTeX: ${match[1]}`);
   }
 });
+
+/* Equations -------------------------------------------------------------- */
+
+function solvedForX(): ProofState {
+  let proof = createProof(challengeSetup(challengeById('solve-left')!));
+  proof = applyRule(proof, 'left-multiply', { kind: 'equation' }, { term: parseTerm('a^-1') });
+  proof = applyRule(proof, 'cancel-inverse', {
+    kind: 'side', side: 'left', target: { path: [], start: 0, end: 1 },
+  });
+  proof = applyRule(proof, 'remove-identity', {
+    kind: 'side', side: 'left', target: { path: [], start: 0, end: 0 },
+  });
+  return proof;
+}
+
+test('an equation proof round trips, addresses and all', () => {
+  const proof = solvedForX();
+  assert.ok(isComplete(proof));
+  assert.deepEqual(chain(proof), [
+    'a x = b',
+    'a^-1 a x = a^-1 b',
+    'e x = a^-1 b',
+    'x = a^-1 b',
+  ]);
+  assert.deepEqual(importProof(proofToJson(proof)), proof);
+});
+
+/**
+ * A whole-equation step has no target, and a local rewrite on an equation
+ * carries the side it acted on. Both are encoded by which fields are present,
+ * so this pins the shape a stored record actually has.
+ */
+test('a whole-equation step records no target, and a side rewrite records its side', () => {
+  const record = exportProof(solvedForX());
+
+  assert.deepEqual(record.steps[0], { rule: 'left-multiply', term: 'a^-1' });
+  assert.equal(record.steps[0].path, undefined);
+  assert.equal(record.steps[0].side, undefined);
+
+  assert.deepEqual(record.steps[1], {
+    rule: 'cancel-inverse', side: 'left', path: [], start: 0, end: 1,
+  });
+});
+
+test('a record naming a side but no target is refused as incoherent', () => {
+  const record = exportProof(solvedForX());
+  record.steps[0] = { rule: 'left-multiply', side: 'left', term: 'a^-1' };
+  assert.throws(
+    () => importProof(JSON.stringify(record)),
+    /names a side but has no target/,
+  );
+});
+
+test('a multiplication stripped of its term is refused rather than assumed', () => {
+  const record = exportProof(solvedForX());
+  record.steps[0] = { rule: 'left-multiply' };
+  assert.throws(() => importProof(JSON.stringify(record)), /needs a term/);
+});
+
+test('a step aimed at the wrong side no longer checks out', () => {
+  const record = exportProof(solvedForX());
+  record.steps[1] = { ...record.steps[1], side: 'right' };
+  assert.throws(() => importProof(JSON.stringify(record)), /Step 2 .* does not check out/);
+});
+
+test('LaTeX joins a chain of equations by equivalence, not equality', () => {
+  const latex = proofToLatex(solvedForX());
+  assert.match(latex, /\iff/);
+  assert.doesNotMatch(latex, /^\s*&= /m);
+  // And an expression chain is still joined by equality.
+  assert.match(proofToLatex(solvedOpening()), /&= /);
+});
+
+test('an equation proof travels in a link', () => {
+  const proof = solvedForX();
+  assert.deepEqual(chain(proofFromHash(proofToHash(proof)!)!), chain(proof));
+});

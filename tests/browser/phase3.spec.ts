@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { PROOF_FORMAT, PROOF_VERSION } from '../../app/serialize.ts';
+
 /**
  * Phase 3a: a proof line can be an equation.
  *
@@ -51,7 +53,7 @@ async function startFree(page: Page, start: string, goal = '') {
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Build an equality chain' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Build a/ })).toBeVisible();
 });
 
 /* Entering an equation --------------------------------------------------- */
@@ -226,4 +228,215 @@ test.describe('narrow viewport', () => {
     const box = await wholeLine(page).boundingBox();
     expect(box!.height).toBeGreaterThanOrEqual(44);
   });
+});
+
+/* ------------------------------------------------------------------ */
+/* Phase 3b: the whole-equation laws that need a term                  */
+/* ------------------------------------------------------------------ */
+
+const CHALLENGE_LABEL: Record<string, string> = {
+  'solve-left': '07',
+  'solve-right': '08',
+  'inverses-of-equals': '10',
+  cancellation: '11',
+};
+
+async function chooseChallenge(page: Page, value: string) {
+  const picker = page.getByRole('combobox');
+  await expect(async () => {
+    await picker.selectOption(value);
+    await expect(page.locator('.challenge-number')).toHaveText(CHALLENGE_LABEL[value], {
+      timeout: 1000,
+    });
+  }).toPass({ timeout: 15_000 });
+}
+
+/** Apply the whole-line control, waiting for the step to actually commit. */
+async function applyWholeLine(page: Page) {
+  const before = await stepCount(page);
+  await expect(async () => {
+    await wholeLine(page).click();
+    expect(await stepCount(page)).toBe(before + 1);
+  }).toPass({ timeout: 15_000 });
+}
+
+/** Server-rendered markup means a click can land before hydration; retry. */
+async function openShare(page: Page) {
+  const field = page.getByLabel('Paste a proof record to replay it');
+  await expect(async () => {
+    if (!(await field.isVisible())) await page.getByRole('button', { name: 'Share' }).click();
+    await expect(field).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 15_000 });
+  return field;
+}
+
+async function applyTarget(page: Page, index = 0) {
+  const before = await stepCount(page);
+  await expect(async () => {
+    await targets(page).nth(index).click();
+    expect(await stepCount(page)).toBe(before + 1);
+  }).toPass({ timeout: 15_000 });
+}
+
+test('a law that multiplies asks for a term to multiply by, not one to insert', async ({
+  page,
+}) => {
+  await chooseChallenge(page, 'solve-left');
+  await selectLaw(page, 'Multiply on the left');
+
+  await expect(page.getByLabel('Multiply by this term')).toBeVisible();
+  // The order toggle belongs to insertion; there are not two orders here.
+  await expect(page.locator('.order-toggle')).toHaveCount(0);
+});
+
+test('multiplying on the left and on the right give different equations', async ({ page }) => {
+  // Free exploration, because challenge 07 deliberately grants only one of them.
+  await startFree(page, 'a x = b');
+  await selectLaw(page, 'Multiply on the left');
+  await page.getByLabel('Multiply by this term').fill('w');
+  await applyWholeLine(page);
+  const left = await currentLine(page);
+
+  await startFree(page, 'a x = b');
+  await selectLaw(page, 'Multiply on the right');
+  await page.getByLabel('Multiply by this term').fill('w');
+  await applyWholeLine(page);
+  const right = await currentLine(page);
+
+  expect(left).toBe('w times a times x equals w times b');
+  expect(right).toBe('a times x times w equals b times w');
+  expect(left, 'the group is not commutative; the side must matter').not.toBe(right);
+});
+
+test('a multiplication will not commit without a term', async ({ page }) => {
+  await chooseChallenge(page, 'solve-left');
+  await selectLaw(page, 'Multiply on the left');
+  await page.getByLabel('Multiply by this term').fill('');
+
+  await expect(wholeLine(page)).toBeDisabled();
+  expect(await stepCount(page)).toBe(0);
+});
+
+test('an equation is not a term to multiply by', async ({ page }) => {
+  await chooseChallenge(page, 'solve-left');
+  await selectLaw(page, 'Multiply on the left');
+  await page.getByLabel('Multiply by this term').fill('a = b');
+
+  await expect(wholeLine(page)).toBeDisabled();
+  expect(await stepCount(page)).toBe(0);
+});
+
+/* Complete proofs through the interface ---------------------------------- */
+
+test('challenge 07 can be solved for x, end to end', async ({ page }) => {
+  await chooseChallenge(page, 'solve-left');
+
+  await selectLaw(page, 'Multiply on the left');
+  await page.getByLabel('Multiply by this term').fill('a^-1');
+  await applyWholeLine(page);
+  expect(await currentLine(page)).toBe(
+    'a inverse times a times x equals a inverse times b',
+  );
+
+  await selectLaw(page, 'Cancel inverse pair');
+  await applyTarget(page);
+
+  await selectLaw(page, 'Remove identity');
+  await applyTarget(page);
+
+  expect(await currentLine(page)).toBe('x equals a inverse times b');
+  await expect(page.locator('.status-pill')).toHaveClass(/is-complete/);
+  await expect(page.locator('.status-pill')).toContainText('3 steps');
+});
+
+test('challenge 10 inverts both sides and reverses the product', async ({ page }) => {
+  await chooseChallenge(page, 'inverses-of-equals');
+
+  await selectLaw(page, 'Invert both sides');
+  await applyWholeLine(page);
+
+  await selectLaw(page, 'Distribute an inverse');
+  await applyTarget(page);
+
+  expect(await currentLine(page)).toBe('x inverse equals b inverse times a inverse');
+  await expect(page.locator('.status-pill')).toHaveClass(/is-complete/);
+});
+
+test('the cancellation law is a challenge, not a law in the catalogue', async ({ page }) => {
+  await chooseChallenge(page, 'cancellation');
+
+  // Nothing in the dock may already do the thing being proved.
+  const laws = await page
+    .getByRole('complementary')
+    .getByRole('button')
+    .evaluateAll((els) => els.map((el) => el.getAttribute('aria-label') ?? ''));
+  expect(laws.join(' | ')).not.toMatch(/cancel a common factor/i);
+
+  await expect(page.locator('.status-pill')).not.toHaveClass(/is-complete/);
+});
+
+/* Records ---------------------------------------------------------------- */
+
+/**
+ * A record carrying both new address kinds: a whole-equation step, which has no
+ * target at all, and a local rewrite on one named side. It is replayed against
+ * the real rule contracts before anything is shown, so this also checks that a
+ * whole-equation step survives the format.
+ */
+const SOLVE_RECORD = {
+  format: PROOF_FORMAT,
+  version: PROOF_VERSION,
+  challenge: 'solve-left',
+  start: 'a x = b',
+  goal: 'x = a^-1 b',
+  ruleset: ['left-multiply', 'cancel-inverse', 'remove-identity'],
+  steps: [
+    { rule: 'left-multiply', term: 'a^-1' },
+    { rule: 'cancel-inverse', side: 'left', path: [], start: 0, end: 1 },
+    { rule: 'remove-identity', side: 'left', path: [], start: 0, end: 0 },
+  ],
+};
+
+test('a record with a whole-equation step replays into a finished proof', async ({ page }) => {
+  const field = await openShare(page);
+  await field.fill(JSON.stringify(SOLVE_RECORD));
+  await page.getByRole('button', { name: 'Import and check' }).click();
+
+  await expect(page.locator('.notice.is-error')).toHaveCount(0);
+  expect(await currentLine(page)).toBe('x equals a inverse times b');
+  await expect(page.locator('.status-pill')).toHaveClass(/is-complete/);
+});
+
+test('a whole-equation step that has lost its term is refused', async ({ page }) => {
+  const tampered = {
+    ...SOLVE_RECORD,
+    steps: [{ rule: 'left-multiply' }, ...SOLVE_RECORD.steps.slice(1)],
+  };
+
+  const field = await openShare(page);
+  await field.fill(JSON.stringify(tampered));
+  await page.getByRole('button', { name: 'Import and check' }).click();
+
+  await expect(page.locator('.notice.is-error')).toContainText('needs a term');
+  expect(await stepCount(page), 'a refused import must not disturb the proof').toBe(0);
+});
+
+test('the sheet says which kind of chain is being built, and what was achieved', async ({
+  page,
+}) => {
+  // The opening challenge is an expression, so the wording is unchanged there.
+  await expect(page.getByRole('heading', { name: 'Build an equality chain' })).toBeVisible();
+
+  await chooseChallenge(page, 'solve-left');
+  await expect(page.getByRole('heading', { name: 'Build a chain of equivalences' })).toBeVisible();
+
+  await selectLaw(page, 'Multiply on the left');
+  await page.getByLabel('Multiply by this term').fill('a^-1');
+  await applyWholeLine(page);
+  await selectLaw(page, 'Cancel inverse pair');
+  await applyTarget(page);
+  await selectLaw(page, 'Remove identity');
+  await applyTarget(page);
+
+  await expect(page.locator('.success-note')).toContainText('Equation solved');
 });

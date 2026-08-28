@@ -505,9 +505,9 @@ export default function Home() {
   const insertParse = useMemo(() => tryParseSubject(insertSource, 'term'), [insertSource]);
   const blocked = rule.needsTerm
     ? !insertParse.ok
-      ? 'Name a term to insert first.'
+      ? `Name a term first: ${(rule.termPrompt ?? 'Insert this term').toLowerCase()}.`
       : insertParse.subject.kind === 'equation'
-        ? 'Insert a term, not an equation.'
+        ? 'Name a term, not an equation.'
         : null
     : null;
 
@@ -853,7 +853,13 @@ export default function Home() {
           <div className="section-heading">
             <div>
               <p className="eyebrow">Proof sheet</p>
-              <h2 id="proof-heading">Build an equality chain</h2>
+              {/* An expression chain is joined by equality; an equation chain
+                  by equivalence. The heading says which is being built. */}
+              <h2 id="proof-heading">
+                {proof.start.kind === 'equation'
+                  ? 'Build a chain of equivalences'
+                  : 'Build an equality chain'}
+              </h2>
             </div>
             <button
               className="reason-toggle"
@@ -922,7 +928,9 @@ export default function Home() {
                     ✓
                   </span>
                   <div>
-                    <strong>Expression simplified</strong>
+                    <strong>
+                      {line.subject.kind === 'equation' ? 'Equation solved' : 'Expression simplified'}
+                    </strong>
                     <span>You reached the target with a justified chain.</span>
                   </div>
                 </div>
@@ -961,8 +969,11 @@ export default function Home() {
           </div>
 
           {rule.needsTerm && (
-            <div className="instantiation" aria-label="Term to insert">
-              <label htmlFor="insert-field">Insert this term</label>
+            <div className="instantiation" aria-label="Term for this law">
+              {/* Insertion asks for a term to place; multiplication asks for a
+                  term to multiply by. The law says which, rather than the
+                  interface assuming one of them. */}
+              <label htmlFor="insert-field">{rule.termPrompt ?? 'Insert this term'}</label>
               <input
                 id="insert-field"
                 onChange={(event) => setInsertSource(event.target.value)}
@@ -970,17 +981,21 @@ export default function Home() {
                 value={insertSource}
               />
               <FieldPreview source={insertSource} />
-              <label className="order-toggle">
-                <input
-                  checked={inverseFirst}
-                  onChange={(event) => setInverseFirst(event.target.checked)}
-                  type="checkbox"
-                />
-                <span>
-                  Inverse first (
-                  <Typeset tex="x^{-1}x" speech="x inverse times x" />)
-                </span>
-              </label>
+              {/* Only insertion has two orders to choose between. Multiplying an
+                  equation already says which side it acts on, in the law. */}
+              {rule.scope === 'term' && rule.usesOrder && (
+                <label className="order-toggle">
+                  <input
+                    checked={inverseFirst}
+                    onChange={(event) => setInverseFirst(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>
+                    Inverse first (
+                    <Typeset tex="x^{-1}x" speech="x inverse times x" />)
+                  </span>
+                </label>
+              )}
             </div>
           )}
 
@@ -1024,7 +1039,8 @@ export default function Home() {
             <p>
               A line can now be an equation. Laws that rewrite part of a line mark their targets
               beneath it; laws that transform the statement as a whole are offered on the line
-              itself.
+              itself. The group is not assumed commutative, so multiplying on the left and on the
+              right are different moves.
             </p>
           </div>
         </aside>

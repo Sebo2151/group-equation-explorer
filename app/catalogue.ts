@@ -191,14 +191,22 @@ export function applyToSubject(
       throw new RangeError(`Rule ${rule} needs an equation.`);
     }
 
-    const checked = argument === undefined ? undefined : validateArgument(argument, rule);
+    // Mirrors `applyRule` for term rules: a law that needs a term does not get
+    // to run without one. An imported step missing its term must be refused
+    // here rather than reaching a rewrite that assumes it is present.
+    const definition = anyRuleById(rule);
+    const checked = definition.needsTerm
+      ? validateArgument(argument, rule)
+      : argument === undefined
+        ? undefined
+        : validateArgument(argument, rule);
+
     const { subject: next, detail } = applyEquationRule(subject, rule, checked);
 
     if (!withinBudget(next)) {
       throw new RangeError('That step would build an expression larger than the app supports.');
     }
 
-    const definition = anyRuleById(rule);
     return {
       subject: next,
       rule,

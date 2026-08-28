@@ -97,6 +97,66 @@ export const CHALLENGES: Challenge[] = [
       'inverse-of-power',
     ],
   },
+
+  /*
+   * From here the line is an equation rather than an expression. The rules that
+   * act on the statement as a whole arrive one at a time, so each challenge
+   * introduces a single new move.
+   *
+   * Cancellation is not in the catalogue: it is derivable, and challenge 09 is
+   * where it gets derived. A later phase can grant it as a tool once it has
+   * been earned, which is exactly the socks-and-shoes pattern.
+   */
+  {
+    id: 'solve-left',
+    label: '07',
+    title: 'Solve for x',
+    blurb:
+      'x is trapped behind an a. Multiplying both sides by the same term keeps the equation true — choose the term that clears it.',
+    start: 'a x = b',
+    goal: 'x = a^-1 b',
+    rules: ['left-multiply', 'cancel-inverse', 'remove-identity'],
+  },
+  {
+    id: 'solve-right',
+    label: '08',
+    title: 'The other side',
+    blurb:
+      'The same problem with the a on the right. The group is not assumed commutative, so the side you multiply on matters.',
+    start: 'x a = b',
+    goal: 'x = b a^-1',
+    rules: ['right-multiply', 'cancel-inverse', 'remove-identity'],
+  },
+  {
+    id: 'read-it-backwards',
+    label: '09',
+    title: 'Read it the other way',
+    blurb:
+      'An equation says the same thing in either direction — but saying it the other way round is still a step.',
+    start: 'b = a x',
+    goal: 'x = a^-1 b',
+    rules: ['symmetry', 'left-multiply', 'cancel-inverse', 'remove-identity'],
+  },
+  {
+    id: 'inverses-of-equals',
+    label: '10',
+    title: 'Inverses of equals',
+    blurb:
+      'Equal terms have equal inverses. Invert both sides, then remember what inverting a product does to the order.',
+    start: 'x = a b',
+    goal: 'x^-1 = b^-1 a^-1',
+    rules: ['invert-both-sides', 'inverse-of-product'],
+  },
+  {
+    id: 'cancellation',
+    label: '11',
+    title: 'Cancel a common factor',
+    blurb:
+      'If a x and a y are equal, then x and y are. This is the cancellation law — and it is a theorem, not an axiom, so here it is proved.',
+    start: 'a x = a y',
+    goal: 'x = y',
+    rules: ['left-multiply', 'cancel-inverse', 'remove-identity'],
+  },
 ];
 
 export function challengeById(id: string): Challenge | undefined {

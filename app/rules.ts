@@ -82,6 +82,14 @@ export type RuleDefinition = {
   attachesToGaps: boolean;
   /** Needs a term from the learner before it can be applied. */
   needsTerm: boolean;
+  /** What to ask for when `needsTerm`; the field label the learner reads. */
+  termPrompt?: string;
+  /**
+   * Whether the order flag on `RuleArgument` means anything to this rule. Only
+   * insertion has two orders to choose between; multiplying an equation says
+   * which side it acts on in the rule itself.
+   */
+  usesOrder?: boolean;
 };
 
 export type Transformation = {
@@ -204,6 +212,8 @@ const RULE_TABLE: Record<RuleId, RuleImplementation> = {
       'Insert a term next to its own inverse. There are infinitely many choices, so the term is yours to name.',
     attachesToGaps: true,
     needsTerm: true,
+    termPrompt: 'Insert this term',
+    usesOrder: true,
     targets: gapTargets,
     rewrite(root, target, argument) {
       const term = requireTerm(argument, 'insert-inverse-pair');
@@ -569,6 +579,8 @@ export const RULES: RuleDefinition[] = Object.values(RULE_TABLE).map((rule) => (
   description: rule.description,
   attachesToGaps: rule.attachesToGaps,
   needsTerm: rule.needsTerm,
+  ...(rule.termPrompt ? { termPrompt: rule.termPrompt } : {}),
+  ...(rule.usesOrder ? { usesOrder: true } : {}),
 }));
 
 export const RULE_IDS: RuleId[] = RULES.map((rule) => rule.id);

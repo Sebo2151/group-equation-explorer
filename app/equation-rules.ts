@@ -15,9 +15,14 @@
  */
 
 import { equation, subjectSpeech, type Equation } from './subject.ts';
+import { inverse, product, termSpeech } from './term.ts';
 import type { RuleArgument } from './rules.ts';
 
-export type EquationRuleId = 'symmetry';
+export type EquationRuleId =
+  | 'symmetry'
+  | 'left-multiply'
+  | 'right-multiply'
+  | 'invert-both-sides';
 
 /**
  * Whether the rule's converse also holds.
@@ -51,6 +56,8 @@ export type EquationRuleDefinition = {
   direction: Direction;
   /** Needs a term from the learner before it can be applied. */
   needsTerm: boolean;
+  /** What to ask for when `needsTerm`; the field label the learner reads. */
+  termPrompt?: string;
 };
 
 type EquationRewrite = { subject: Equation; detail: string };
@@ -83,6 +90,96 @@ const EQUATION_RULE_TABLE: Record<EquationRuleId, EquationRuleImplementation> = 
       };
     },
   },
+
+  /**
+   * Left and right multiplication are separate rules rather than one rule with
+   * a direction argument. The group is not assumed abelian, so `wu = wv` and
+   * `uw = vw` are different statements; keeping them apart means a recorded
+   * step, an exported reason and a spoken name each say which was used without
+   * needing a flag read alongside them.
+   *
+   * The converse holds — cancel `w` by multiplying by its inverse — so these
+   * are equivalences. Cancellation is not offered as a law of its own: it is
+   * derivable from these, and proving it before using it is the point.
+   */
+  'left-multiply': {
+    id: 'left-multiply',
+    name: 'Multiply on the left',
+    family: 'equation',
+    reason: 'Left multiplication',
+    formula: 'u=v \\iff wu=wv',
+    spokenFormula: 'u equals v if and only if w times u equals w times v',
+    description: 'Multiply both sides on the left by the same term.',
+    direction: 'iff',
+    needsTerm: true,
+    termPrompt: 'Multiply by this term',
+    applies() {
+      return true;
+    },
+    rewrite(subject, argument) {
+      const factor = argument!.term;
+      return {
+        subject: equation(
+          product([factor, subject.left]),
+          product([factor, subject.right]),
+        ),
+        detail: `multiplying both sides on the left by ${termSpeech(factor)}`,
+      };
+    },
+  },
+
+  'right-multiply': {
+    id: 'right-multiply',
+    name: 'Multiply on the right',
+    family: 'equation',
+    reason: 'Right multiplication',
+    formula: 'u=v \\iff uw=vw',
+    spokenFormula: 'u equals v if and only if u times w equals v times w',
+    description: 'Multiply both sides on the right by the same term.',
+    direction: 'iff',
+    needsTerm: true,
+    termPrompt: 'Multiply by this term',
+    applies() {
+      return true;
+    },
+    rewrite(subject, argument) {
+      const factor = argument!.term;
+      return {
+        subject: equation(
+          product([subject.left, factor]),
+          product([subject.right, factor]),
+        ),
+        detail: `multiplying both sides on the right by ${termSpeech(factor)}`,
+      };
+    },
+  },
+
+  /**
+   * Inversion is its own converse, since inverting twice returns the original
+   * equation. Note that this reverses nothing on its own: turning `(ab)^{-1}`
+   * into `b^{-1}a^{-1}` is socks-and-shoes, a separate law applied to one side
+   * afterwards.
+   */
+  'invert-both-sides': {
+    id: 'invert-both-sides',
+    name: 'Invert both sides',
+    family: 'equation',
+    reason: 'Inverses of equals',
+    formula: 'u=v \\iff u^{-1}=v^{-1}',
+    spokenFormula: 'u equals v if and only if u inverse equals v inverse',
+    description: 'Equal terms have equal inverses.',
+    direction: 'iff',
+    needsTerm: false,
+    applies() {
+      return true;
+    },
+    rewrite(subject) {
+      return {
+        subject: equation(inverse(subject.left), inverse(subject.right)),
+        detail: 'inverting both sides',
+      };
+    },
+  },
 };
 
 export const EQUATION_RULES: EquationRuleDefinition[] = Object.values(EQUATION_RULE_TABLE).map(
@@ -96,6 +193,7 @@ export const EQUATION_RULES: EquationRuleDefinition[] = Object.values(EQUATION_R
     description: rule.description,
     direction: rule.direction,
     needsTerm: rule.needsTerm,
+    ...(rule.termPrompt ? { termPrompt: rule.termPrompt } : {}),
   }),
 );
 

@@ -32,7 +32,7 @@ type Move = { rule: AnyRuleId; address: Address; argument?: RuleArgument };
  * requirement that an actual proof of each challenge be checked with exactly
  * its permitted tools before shipping it.
  */
-function search(state: ProofState, maxDepth: number, maxStates = 20_000): Move[] | null {
+function search(state: ProofState, maxDepth: number, maxStates = 120_000): Move[] | null {
   const goal = state.goal;
   if (goal === null) return null;
 
@@ -85,7 +85,12 @@ function movesFrom(state: ProofState): Move[] {
   );
 }
 
-/** Generators mentioned by the challenge, which is all a proof should need. */
+/**
+ * The terms a proof might need to name: the generators the challenge mentions,
+ * and their inverses. The inverses are what makes the equation challenges
+ * reachable at all — clearing an `a` from a side means multiplying by `a^-1`,
+ * which is not a generator and so would never be tried otherwise.
+ */
 function instantiationCandidates(state: ProofState): Term[] {
   const names = new Set<string>();
   const collect = (term: Term) => {
@@ -96,7 +101,10 @@ function instantiationCandidates(state: ProofState): Term[] {
   };
   subjectTerms(state.start).forEach(collect);
   if (state.goal) subjectTerms(state.goal).forEach(collect);
-  return [...names].sort().map((name) => parseTerm(name));
+
+  return [...names]
+    .sort()
+    .flatMap((name) => [parseTerm(name), parseTerm(`${name}^-1`)]);
 }
 
 /* ------------------------------------------------------------------ */
@@ -149,6 +157,39 @@ test('the socks-and-shoes challenge is not solvable without socks and shoes', ()
     ruleset: challenge.rules.filter((rule) => rule !== 'inverse-of-product'),
   };
   assert.equal(search(createProof(without), 5), null);
+});
+
+/**
+ * Cancellation is a theorem, not an axiom, so the challenge that proves it must
+ * not be given anything that trivialises it. There is no cancellation law in
+ * the catalogue at all — this records that the challenge genuinely depends on
+ * multiplying both sides, rather than being solvable some other way.
+ */
+test('the cancellation challenge cannot be done without multiplying both sides', () => {
+  const challenge = CHALLENGES.find((entry) => entry.id === 'cancellation')!;
+  const without = {
+    ...challengeSetup(challenge),
+    ruleset: challenge.rules.filter((rule) => rule !== 'left-multiply'),
+  };
+  assert.equal(search(createProof(without), 6), null);
+});
+
+test('the equation challenges each need the whole-equation law they introduce', () => {
+  const introduced: Record<string, AnyRuleId> = {
+    'solve-left': 'left-multiply',
+    'solve-right': 'right-multiply',
+    'read-it-backwards': 'symmetry',
+    'inverses-of-equals': 'invert-both-sides',
+  };
+
+  for (const [id, rule] of Object.entries(introduced)) {
+    const challenge = CHALLENGES.find((entry) => entry.id === id)!;
+    const without = {
+      ...challengeSetup(challenge),
+      ruleset: challenge.rules.filter((entry) => entry !== rule),
+    };
+    assert.equal(search(createProof(without), 6), null, `${id} does not actually need ${rule}`);
+  }
 });
 
 test('free exploration permits the whole catalogue and never completes', () => {

@@ -46,7 +46,7 @@ Associativity is still suppressed in the interface: products are flat, so
 students do not spend their time rearranging parentheses. Structure under an
 inverse or a power is kept, because that structure is mathematically meaningful.
 
-## Phase 3a
+## Phase 3
 
 A proof line can now be an *equation* as well as an expression. A chain of
 expressions is joined by `=`; a chain of equations by `⟺`, because each line is
@@ -71,9 +71,20 @@ them apart:
   no place to be chosen among, so it is offered as a named control on the line
   rather than as a bracket under part of it. `symmetry` is the first of these.
 
+The whole-equation laws are symmetry, left and right multiplication, and
+inverting both sides. Left and right multiplication are separate laws rather
+than one law with a direction argument: the group is not assumed abelian, so
+`wu = wv` and `uw = vw` are different statements, and a recorded step or a
+spoken name should say which was used without a flag read alongside it.
+
 Every whole-equation law declares a `direction`, and a test asserts that every
 one of them in this phase is an equivalence. The field exists now so that the
 one-way inference of Phase 6 does not need a record migration to gain it.
+
+Cancellation is deliberately **not** a law. It is derivable from left
+multiplication and the local laws, so challenge 11 is where it gets proved; a
+later phase can grant it as a tool once it has been earned. That is the same
+pattern socks-and-shoes already follows.
 
 Goal matching is orientation sensitive: reaching `v = u` when the goal is
 `u = v` leaves symmetry still to be applied. Making the two equal would hand out
@@ -126,15 +137,14 @@ longer proofs.
 
 ### What is still not implemented
 
-The whole-equation catalogue holds only `symmetry` so far. Left and right
-multiplication, inverting both sides, and the equation-solving challenges are
-Phase 3b, along with a finite-group evaluator to catch any rule that has
-quietly assumed commutativity.
-
 No implication mode, custom relations or presentations, unlock system, hints,
-progress storage, or personal bests. Those are Phases 4 to 6. Cancellation will
-be a challenge rather than a built-in law: it is derivable, and proving it
-before using it is the point.
+progress storage, or personal bests. Those are Phases 4 to 6. Goals are exact
+equations; a "solve for x" goal expressed as a shape rather than one particular
+equation is wanted, but not yet built.
+
+Note that a proof chain is still a chain of equivalences. Establishing that one
+statement *follows from* another without the converse is Phase 6, and no law in
+the catalogue can express it.
 
 ## Run locally
 
@@ -165,6 +175,14 @@ npx tsc --noEmit --incremental false
 npm run build
 npm run test:browser
 ```
+
+Soundness of the rules is checked by evaluation as well as by structure. Every
+law is applied to sample terms and the result compared, over every assignment of
+generators to elements, in S3 and D4 — both non-abelian, which is the point. A
+rule that quietly assumed commutativity would be structurally impeccable and
+would fail there immediately. Note what this cannot see: left and right
+multiplication are *both* sound, so only the shape of the result distinguishes
+them, and that is asserted separately.
 
 `npm run test:browser` runs the Playwright suites in `tests/browser`, against a
 desktop viewport and a genuine 390px phone profile. It asserts behavioural
@@ -197,6 +215,8 @@ passes also remain open. See the audit record for the current gaps.
   column run
 - `app/page.tsx` — React interaction and typesetting
 - `app/globals.css` — visual system and responsive layout
+- `tests/support/finite-group.ts` — evaluating a term in a concrete finite
+  group, used to check that no rule has quietly assumed commutativity
 - `tests/*.test.ts` — Node tests for each module above
 - `tests/browser/*.spec.ts` — Playwright interaction invariants
 
