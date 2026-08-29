@@ -490,7 +490,10 @@ function scoreLine(challenge: Challenge, taken: number, best: number | undefined
 
 export default function Home() {
   const [proof, setProof] = useState(() => createProof(challengeSetup(CHALLENGES[0])));
-  const [selectedRule, setSelectedRule] = useState<AnyRuleId>(CHALLENGES[0].rules[0]);
+  // A challenge should begin with a mathematical choice, not a UI hint. The
+  // learner selects the first law after reading the line; only then do its
+  // possible applications appear.
+  const [selectedRule, setSelectedRule] = useState<AnyRuleId | null>(null);
   const [reasonsOpen, setReasonsOpen] = useState(true);
   const [insertSource, setInsertSource] = useState('a');
   const [inverseFirst, setInverseFirst] = useState(false);
@@ -553,7 +556,7 @@ export default function Home() {
 
   const line = currentLine(proof);
   const complete = isComplete(proof);
-  const rule = anyRuleById(selectedRule);
+  const rule = selectedRule ? anyRuleById(selectedRule) : null;
   const challenge = challengeById(proof.challenge);
   const challengePosition = challenge
     ? CHALLENGES.findIndex((entry) => entry.id === challenge.id)
@@ -626,14 +629,14 @@ export default function Home() {
    * so they cannot disagree about how many options there are.
    */
   const addresses = useMemo(
-    () => (complete ? [] : findAddresses(line.subject, selectedRule)),
+    () => (complete || !selectedRule ? [] : findAddresses(line.subject, selectedRule)),
     [complete, line.subject, selectedRule],
   );
 
   const layout = useMemo(() => layoutSubject(line.subject), [line.subject]);
 
   const insertParse = useMemo(() => tryParseSubject(insertSource, 'term'), [insertSource]);
-  const blocked = rule.needsTerm
+  const blocked = rule?.needsTerm
     ? !insertParse.ok
       ? `Name a term first: ${(rule.termPrompt ?? 'Insert this term').toLowerCase()}.`
       : insertParse.subject.kind === 'equation'
@@ -726,7 +729,7 @@ export default function Home() {
   const open = useCallback(
     (next: ProofState, message?: Notice) => {
       commit(next);
-      setSelectedRule(next.ruleset[0]);
+      setSelectedRule(null);
       setNotice(message ?? null);
     },
     [commit],
@@ -872,6 +875,7 @@ export default function Home() {
 
   const apply = useCallback(
     ({ address }: ApplyRequest) => {
+      if (!selectedRule || !rule) return;
       const argument =
         rule.needsTerm && insertParse.ok && insertParse.subject.kind === 'expression'
           ? { term: insertParse.subject.term, ...(inverseFirst ? { inverseFirst: true } : {}) }
@@ -886,7 +890,7 @@ export default function Home() {
         setNotice({ tone: 'error', text: (error as Error).message });
       }
     },
-    [commit, insertParse, inverseFirst, proof, rule.needsTerm, selectedRule],
+    [commit, insertParse, inverseFirst, proof, rule, selectedRule],
   );
 
   /**
@@ -1281,7 +1285,7 @@ export default function Home() {
                       detail={entry.step?.detail}
                       reason={reasonsOpen ? entry.step?.reason : undefined}
                       interactive={
-                        isCurrent && !complete ? (
+                        isCurrent && !complete && rule ? (
                           <InteractiveSubject
                             addresses={addresses}
                             blocked={blocked}
@@ -1303,9 +1307,11 @@ export default function Home() {
             <p aria-live="polite" className="sr-only">
               {complete
                 ? `Complete. ${subjectSpeech(line.subject)} in ${steps(stepCount(proof))}.`
-                : `${subjectSpeech(line.subject)}. ${addresses.length} ${
-                    addresses.length === 1 ? 'place' : 'places'
-                  } for ${rule.name}.`}
+                : rule
+                  ? `${subjectSpeech(line.subject)}. ${addresses.length} ${
+                      addresses.length === 1 ? 'place' : 'places'
+                    } for ${rule.name}.`
+                  : `${subjectSpeech(line.subject)}. No law selected.`}
             </p>
 
             {/* Carries the ruling on below the last written line. */}
@@ -1372,25 +1378,34 @@ export default function Home() {
                   </div>
                 </div>
               ) : (
-                <div className="selection-note">
+                <div className={`selection-note ${rule ? '' : 'is-empty'}`}>
                   <span className="selection-swatch" aria-hidden="true" />
                   <div>
-                    <strong>{rule.name}</strong>
-                    <span>
-                      {addresses.length
-                        ? rule.scope === 'equation'
-                          ? `${rule.description} It acts on the whole equation, not on a part of it.`
-                          : `${rule.description} ${addresses.length} ${
-                              addresses.length === 1 ? 'place' : 'places'
-                            } marked ${
-                              rule.attachesToGaps
-                                ? 'between the factors'
-                                : 'below the expression'
-                            }.`
-                        : rule.scope === 'equation'
-                          ? `${rule.description} This line is an expression, not an equation, so there is nothing for it to act on.`
-                          : `${rule.description} It is still a true law — there is just nowhere to use it here. Try another law.`}
-                    </span>
+                    {rule ? (
+                      <>
+                        <strong>{rule.name}</strong>
+                        <span>
+                          {addresses.length
+                            ? rule.scope === 'equation'
+                              ? `${rule.description} It acts on the whole equation, not on a part of it.`
+                              : `${rule.description} ${addresses.length} ${
+                                  addresses.length === 1 ? 'place' : 'places'
+                                } marked ${
+                                  rule.attachesToGaps
+                                    ? 'between the factors'
+                                    : 'below the expression'
+                                }.`
+                            : rule.scope === 'equation'
+                              ? `${rule.description} This line is an expression, not an equation, so there is nothing for it to act on.`
+                              : `${rule.description} It is still a true law — there is just nowhere to use it here. Try another law.`}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <strong>No law selected</strong>
+                        <span>Choose the law that should move the proof forward. Its possible applications will then be marked on the current line.</span>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
@@ -1405,7 +1420,7 @@ export default function Home() {
             <p>Choose a law. Every place it can be used is then marked.</p>
           </div>
 
-          {rule.needsTerm && (
+          {rule?.needsTerm && (
             <div className="instantiation" aria-label="Term for this law">
               {/* Insertion asks for a term to place; multiplication asks for a
                   term to multiply by. The law says which, rather than the
@@ -1440,7 +1455,7 @@ export default function Home() {
             <details
               className="rule-family purpose-group"
               key={purpose.id}
-              open={purpose.rules.includes(selectedRule) ? true : undefined}
+              open={selectedRule && purpose.rules.includes(selectedRule) ? true : undefined}
             >
               <summary>
                 <span>
@@ -1810,7 +1825,7 @@ function MenuScreen({
           </ul>
         ) : (
           <p className="menu-lead">
-            No laws earned yet. The first is the identity inverting to itself, in challenge 03.
+              No laws earned yet. The first is the identity inverting to itself, in challenge 05.
           </p>
         )}
         {storageFailed && (

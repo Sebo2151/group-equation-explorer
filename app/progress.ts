@@ -36,7 +36,7 @@ export const PROGRESS_VERSION = 1;
 
 /**
  * Bounds the work a stored file can cause before any of it is replayed. There
- * are nineteen challenges; anything claiming far more is not ours.
+ * there are twenty-one challenges; anything claiming far more is not ours.
  */
 const MAX_ENTRIES = 100;
 

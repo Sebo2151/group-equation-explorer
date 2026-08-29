@@ -264,10 +264,10 @@ test.describe('narrow viewport', () => {
 
 const CHALLENGE_LABEL: Record<string, string> = {
   'cancel-pairs': '01',
-  'solve-left': '11',
-  'solve-right': '12',
-  'inverses-of-equals': '14',
-  cancellation: '15',
+  'solve-left': '13',
+  'solve-right': '14',
+  'inverses-of-equals': '16',
+  cancellation: '17',
 };
 
 /**
@@ -312,7 +312,8 @@ test('a law that multiplies asks for a term to multiply by, not one to insert', 
 });
 
 test('multiplying on the left and on the right give different equations', async ({ page }) => {
-  // Free exploration, because challenge 07 deliberately grants only one of them.
+  // Free exploration, because the course challenges deliberately grant only
+  // one multiplication direction at a time.
   await startFree(page, 'a x = b');
   await selectLaw(page, 'Multiply on the left');
   await page.getByLabel('Multiply by this term').fill('w');

@@ -298,6 +298,7 @@ h2 { margin-bottom: 0; font-size: 1.05rem; letter-spacing: -0.015em; }
 .selection-note div { display: grid; gap: 2px; }
 .selection-note strong { color: var(--ink); }
 .selection-note span:last-child { line-height: 1.45; }
+.selection-note.is-empty .selection-swatch { border-color: var(--muted); border-style: dashed; background: transparent; }
 .selection-swatch { flex: none; width: 19px; height: 19px; border: 2px solid var(--gold); border-radius: 5px; background: var(--gold-soft); }
 .success-note { border: 1px solid #b8dcc6; background: var(--green-soft); color: var(--green); animation: success-arrives 420ms ease-out both; }
 .success-mark { display: grid; width: 27px; height: 27px; place-items: center; border-radius: 50%; background: var(--green); color: white; font-weight: 900; }

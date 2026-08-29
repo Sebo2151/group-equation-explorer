@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { beginProof } from './briefing.ts';
+import { beginProof, revealLaw } from './briefing.ts';
 
 /**
  * The shell: where the app opens, how you get between the menu and a proof, and
@@ -24,6 +24,13 @@ async function applyTarget(page: Page, index = 0) {
   }).toPass({ timeout: 15_000 });
 }
 
+async function selectLaw(page: Page, name: string) {
+  const button = page.locator(`.rules-card .rule-card[aria-label^="${name},"]`);
+  await revealLaw(button);
+  await button.click();
+  await expect(button).toHaveAttribute('aria-pressed', 'true');
+}
+
 async function openChallenge(page: Page, label: string) {
   await expect(async () => {
     await page.getByRole('button', { name: new RegExp(`^Challenge ${label}:`) }).click();
@@ -44,7 +51,7 @@ test('the app opens on the menu, not in a proof', async ({ page }) => {
 test('the menu lists every challenge and can start the first', async ({ page }) => {
   await page.goto('/');
   const entries = page.locator('.challenge-entry');
-  await expect(entries).toHaveCount(19);
+  await expect(entries).toHaveCount(21);
 
   await openChallenge(page, '01');
   await expect(page.locator('#briefing-title')).toHaveText('Cancel what undoes itself');
@@ -61,7 +68,7 @@ test('the menu lists every challenge and can start the first', async ({ page }) 
 test('a locked challenge still opens by its own link, and says so', async ({ page }) => {
   await page.goto('/#challenge=socks-and-shoes');
   await expect(page.locator('#briefing-title')).toHaveText('Socks and shoes');
-  await expect(page.locator('.briefing-number')).toHaveText('Challenge 07');
+  await expect(page.locator('.briefing-number')).toHaveText('Challenge 09');
   await expect(page.locator('.notice')).toContainText('jumped ahead');
 });
 
@@ -79,7 +86,9 @@ test('a link naming no challenge lands on the menu rather than failing', async (
 test('a proof in progress survives a trip to the menu and back', async ({ page }) => {
   await page.goto('/#challenge=cancel-pairs');
   await beginProof(page);
+  await selectLaw(page, 'Cancel inverse pair');
   await applyTarget(page);
+  await selectLaw(page, 'Remove identity');
   await applyTarget(page);
   const line = await page
     .locator('.proof-line.is-current [role=math]')
@@ -101,6 +110,7 @@ test('the back button returns to the menu without restarting the proof', async (
   await page.goto('/');
   await openChallenge(page, '01');
   await beginProof(page);
+  await selectLaw(page, 'Cancel inverse pair');
   await applyTarget(page);
 
   await page.goBack();

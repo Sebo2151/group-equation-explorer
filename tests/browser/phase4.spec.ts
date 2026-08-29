@@ -96,7 +96,7 @@ test.beforeEach(async ({ page }) => {
 test('only the first challenge is open on a fresh device', async ({ page }) => {
   await expect(page.getByRole('button', { name: /^Challenge 01:.*Not yet proved/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Challenge 02:.*Locked until/ })).toBeVisible();
-  await expect(page.locator('.challenge-entry.is-locked')).toHaveCount(18);
+  await expect(page.locator('.challenge-entry.is-locked')).toHaveCount(20);
 });
 
 /**
@@ -109,7 +109,7 @@ test('a locked entry sends the learner to the earliest unfinished prerequisite',
   // click on freshly reloaded markup: a click that lands before React attaches
   // hits the server render and does nothing.
   await expect(async () => {
-    await page.getByRole('button', { name: /^Challenge 19:/ }).click();
+    await page.getByRole('button', { name: /^Challenge 21:/ }).click();
     await expect(page.locator('.briefing-number')).toHaveText('Challenge 01', { timeout: 1000 });
   }).toPass({ timeout: 15_000 });
 });
@@ -121,7 +121,7 @@ test('proving a challenge opens the next one and records the length', async ({ p
 
   await expect(page.getByRole('button', { name: /^Challenge 01:.*Proved in 4 steps/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Challenge 02:.*Not yet proved/ })).toBeVisible();
-  await expect(page.locator('.challenge-entry.is-locked')).toHaveCount(17);
+  await expect(page.locator('.challenge-entry.is-locked')).toHaveCount(19);
 });
 
 test('a challenge briefing frames the work before revealing the workbench', async ({ page }) => {
@@ -143,6 +143,12 @@ test('the law palette groups available moves by what they accomplish', async ({ 
   const palette = page.getByRole('complementary');
   await expect(palette.getByText('Simplify what is there', { exact: true })).toBeVisible();
   await expect(palette.getByText('Transform the equation', { exact: true })).toBeVisible();
+  await expect(page.locator('.selection-note strong')).toHaveText('No law selected');
+  await expect(page.locator('.rule-card[aria-pressed="true"]')).toHaveCount(0);
+  await expect(targets(page)).toHaveCount(0);
+  await expect(palette.locator('.purpose-group[open]')).toHaveCount(0);
+
+  await selectLaw(page, 'Multiply on the left');
   await expect(palette.locator('.purpose-group[open]')).toHaveCount(1);
 });
 
@@ -188,26 +194,34 @@ test('a lemma is not available in the challenge that proves it', async ({ page }
 
   await page.goto('/#challenge=double-inverse');
   await beginProof(page);
-  await expect(page.getByRole('button', { name: /^Undo a double inverse,/ })).toBeVisible();
+  await expect(page.locator('.rule-card[aria-label^="Undo a double inverse,"]')).toHaveCount(1);
 });
 
 /**
  * Provenance is shown for a law the learner has *earned*, not for one that
  * merely happens to be in the ruleset — somebody who arrived by link has the
  * tool without having proved it, and should not be told they proved it. So this
- * walks the course to challenge 04 for real, taking the hints, which is also
+ * walks the course to challenge 06 for real, taking the hints, which is also
  * the cheapest end-to-end check that the hints can finish an unfamiliar proof.
  */
 test('a law earned by proving it says which challenge proved it', async ({ page }) => {
-  for (const id of ['cancel-pairs', 'insert-a-pair', 'prove-identity-inverse', 'prove-double-inverse']) {
+  for (const id of [
+    'cancel-pairs',
+    'insert-a-pair',
+    'unique-right-inverse',
+    'unique-left-inverse',
+    'prove-identity-inverse',
+    'prove-double-inverse',
+  ]) {
     await proveByHints(page, id);
   }
 
   await page.goto('/#challenge=double-inverse');
   await beginProof(page);
-  await expect(
-    page.getByRole('button', { name: /Undo a double inverse.*proved in challenge 04/ }),
-  ).toBeVisible();
+  await expect(page.locator('.rule-card[aria-label^="Undo a double inverse,"]')).toHaveAttribute(
+    'aria-label',
+    /proved in challenge 06/,
+  );
 
   // And it is named where it was earned, too.
   await page.getByRole('button', { name: 'Menu' }).click();
@@ -323,7 +337,7 @@ test('a completion claimed in storage without a proof buys nothing', async ({ pa
   await page.reload();
 
   await expect(page.locator('.notice')).toContainText('no longer check out');
-  await expect(page.locator('.course-progress')).toContainText(/0\s*of 19/);
+  await expect(page.locator('.course-progress')).toContainText(/0\s*of 21/);
   await expect(page.getByRole('button', { name: /^Challenge 02:.*Locked until/ })).toBeVisible();
 });
 
@@ -337,7 +351,7 @@ test('a real proof relabelled as shorter is refused rather than believed', async
   }, STORAGE_KEY);
   await page.reload();
 
-  await expect(page.locator('.course-progress')).toContainText(/0\s*of 19/);
+  await expect(page.locator('.course-progress')).toContainText(/0\s*of 21/);
 });
 
 test('progress can be cleared, and clearing relocks the course', async ({ page }) => {
@@ -345,12 +359,12 @@ test('progress can be cleared, and clearing relocks the course', async ({ page }
   await page.getByRole('button', { name: 'Menu' }).click();
   await page.getByRole('button', { name: 'Clear progress' }).click();
 
-  await expect(page.locator('.course-progress')).toContainText(/0\s*of 19/);
+  await expect(page.locator('.course-progress')).toContainText(/0\s*of 21/);
   await expect(page.getByRole('button', { name: /^Challenge 02:.*Locked until/ })).toBeVisible();
 
   // And it is gone from the device, not merely from the screen.
   await page.reload();
-  await expect(page.locator('.course-progress')).toContainText(/0\s*of 19/);
+  await expect(page.locator('.course-progress')).toContainText(/0\s*of 21/);
 });
 
 /* Goal shapes -------------------------------------------------------------- */

@@ -41,12 +41,12 @@ async function applyTarget(page: Page, index = 0) {
 const CHALLENGE_LABEL: Record<string, string> = {
   'cancel-pairs': '01',
   'insert-a-pair': '02',
-  'prove-double-inverse': '04',
-  'double-inverse': '05',
-  'prove-socks-and-shoes': '06',
-  'socks-and-shoes': '07',
-  'nested-inverse': '08',
-  powers: '09',
+  'prove-double-inverse': '06',
+  'double-inverse': '07',
+  'prove-socks-and-shoes': '08',
+  'socks-and-shoes': '09',
+  'nested-inverse': '10',
+  powers: '11',
   free: '··',
 };
 
@@ -111,9 +111,8 @@ async function startFree(page: Page, start: string, goal = '') {
 
 /**
  * The markup is server-rendered, and several controls already carry their
- * eventual state in that markup — the first law is `aria-pressed` before any
- * script runs, and `selectOption` sets a select's value whether or not React is
- * listening. Asserting on those cannot distinguish "hydrated" from "not yet".
+ * eventual state in that markup. Asserting on those cannot distinguish
+ * "hydrated" from "not yet".
  *
  * So gate on a state change no server render can have produced: toggle the
  * reasons and watch the control's own label change, then put it back. It is
@@ -344,6 +343,7 @@ test('free exploration parses input and refuses what it cannot read', async ({ p
 for (const label of ['Start from', 'Goal (optional)']) {
   test(`an invalid ${label} draft can be reopened and repaired`, async ({ page }) => {
     await startFree(page, 'a a^-1 b');
+    await selectLaw(page, 'Cancel inverse pair');
     await applyTarget(page);
     const committed = await currentLine(page);
 
@@ -498,6 +498,7 @@ for (const label of ['Start from', 'Goal (optional)', 'Insert this term', 'Paste
     } else {
       await startFree(page, 'a a^-1 b');
     }
+    await selectLaw(page, onSheet ? 'Insert inverse pair' : 'Cancel inverse pair');
     await applyTarget(page);
     const committed = await currentLine(page);
     if (!onSheet) await openMenu(page);

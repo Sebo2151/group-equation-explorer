@@ -83,15 +83,18 @@ the interface uses, and drops anything that does not check out, including a real
 proof relabelled with a shorter step count. A completion can be claimed in
 storage, but it cannot be bought there.
 
-The nineteen challenges are grouped into five named chapters, each with a
-learning outcome. Four additional practice and transfer problems reinforce
-powers, mixed inverses, and solving equations with factors on both ends. Every
-challenge opens with a focused briefing and closes with a takeaway and a clear
-next step. The briefing presents the starting point, target, and prediction
-prompt before the proof controls appear. Once work begins, the goal stays
-compact and the laws are grouped by what they accomplish. The menu leads with
-the learner's next useful action, shows overall progress, and keeps the full
-course map available chapter by chapter.
+The twenty-one challenges are grouped into five named chapters, each with a
+learning outcome. The inverse chapter now proves separately that a right inverse
+and a left inverse must equal the named inverse before using uniqueness to
+identify the inverse of the identity. Later practice reinforces powers, mixed
+inverses, and solving equations with factors on both ends. Every challenge opens
+with a focused briefing and closes with a takeaway and a clear next step. The
+briefing presents the starting point, target, and prediction prompt before the
+proof controls appear. Once work begins, the goal stays compact and the laws are
+grouped by what they accomplish. No law is selected initially: identifying the
+appropriate tool is part of the proof. The menu leads with the learner's next
+useful action, shows overall progress, and keeps the full course map available
+chapter by chapter.
 
 ## The shell
 

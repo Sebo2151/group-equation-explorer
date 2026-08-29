@@ -16,7 +16,7 @@ export function HelpText() {
         choose <strong>Begin proof</strong>. You can reopen the briefing from the proof controls.
       </p>
       <ol>
-        <li>Choose a law. Every place it can be used is then marked.</li>
+        <li>No law is chosen for you. Choose one, and every place it can be used is then marked.</li>
         <li>Choose one of those places. A numbered bracket sits under the part it would rewrite.</li>
         <li>The new line joins the proof, labelled with the law that produced it.</li>
       </ol>
