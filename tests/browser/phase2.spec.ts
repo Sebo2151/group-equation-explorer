@@ -39,10 +39,12 @@ async function applyTarget(page: Page, index = 0) {
 const CHALLENGE_LABEL: Record<string, string> = {
   'cancel-pairs': '01',
   'insert-a-pair': '02',
-  'double-inverse': '03',
-  'socks-and-shoes': '04',
-  'nested-inverse': '05',
-  powers: '06',
+  'prove-double-inverse': '04',
+  'double-inverse': '05',
+  'prove-socks-and-shoes': '06',
+  'socks-and-shoes': '07',
+  'nested-inverse': '08',
+  powers: '09',
   free: '··',
 };
 
@@ -168,8 +170,8 @@ const SOCKS_RECORD = {
   format: PROOF_FORMAT,
   version: PROOF_VERSION,
   challenge: 'socks-and-shoes',
-  start: '(a b)^-1 a b',
-  goal: 'e',
+  start: '(a b)^-1 a',
+  goal: 'b^-1',
   ruleset: ['inverse-of-product', 'cancel-inverse', 'remove-identity'],
   steps: [
     { rule: 'inverse-of-product', path: [], start: 0, end: 0 },
@@ -385,7 +387,7 @@ test('a pasted proof record is replayed before it is shown', async ({ page }) =>
   await expect(page.locator('.notice.is-ok')).toContainText('imported and replayed');
   // A record that checks out opens the proof it describes.
   expect(await stepCount(page)).toBe(2);
-  expect(await currentLine(page)).toBe('b inverse times identity e times b');
+  expect(await currentLine(page)).toBe('b inverse times identity e');
 });
 
 test('a tampered record is refused and leaves the current proof alone', async ({ page }) => {

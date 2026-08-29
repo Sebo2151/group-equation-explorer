@@ -1,6 +1,6 @@
 # Development plan
 
-Last updated: 2026-08-27.
+Last updated: 2026-08-28.
 
 This document preserves the product discussion and six-phase roadmap. It is a
 plan, not a claim that the planned features already exist. For the code's actual
@@ -298,7 +298,7 @@ whoever was reading the repository and towards what a student needs to know. A
 build note describing the current phase had been rendering to learners; it is
 gone.
 
-### Phase 4 — Curriculum and progression: planned
+### Phase 4 — Curriculum and progression: implemented
 
 Add the teaching modes, curated dependency-checked challenges, graduated hints,
 unlocks, proof viewer, personal bests, and device-local persistence with export/reset.
@@ -306,6 +306,35 @@ Persisted data and imported proofs must be validated, not trusted as unlock evid
 
 Acceptance: no circular proofs or assumption leakage; scores are comparable only
 within their recorded ruleset; valid alternative proofs receive credit.
+
+Implemented on 2026-08-28; see [phase-4-2026-08-28.md](phase-4-2026-08-28.md).
+The curriculum first grew from eleven challenges to fifteen, because every derived law
+is now proved in a challenge of its own before any later one may use it — a
+constraint checked by test rather than by review. Cancellation became an earned
+law, which Phase 3 had anticipated. Goals may be a shape as well as an exact
+line, which is how alternative proofs receive credit.
+
+A subsequent refinement expanded the course to nineteen challenges in five
+chapters. The new work adds deliberate practice with powers and mixed inverses,
+then transfer problems that isolate a variable with factors on both ends and
+with the equation written in the less familiar orientation. Chapter outcomes,
+thinking prompts, post-proof takeaways, and a next-challenge action make the
+instructional sequence visible rather than leaving the learner to infer it.
+
+Two things were decided against the plan's wording. The three teaching modes
+were not built as modes: guidance turned out to be a property of a challenge,
+so hints are available everywhere at whatever grade is asked for, and free
+exploration is already its own destination. And hints walk an authored,
+machine-checked reference proof rather than searching, because search belongs to
+Phase 6 and would be unreliable here — the insertion laws have infinitely many
+instantiations, and failing to find a proof is not the same as there being none.
+
+One kernel change was needed and is recorded because it changes what a step is:
+`cancel-inverse` now matches a factor against the adjacent run it inverts, so
+that `(ab)^-1 a b` cancels in one move. Without it socks-and-shoes cannot be
+derived from the axioms at all, since flat products dissolve the grouping the
+proof needs. This is the plan's own rule that associative rebracketing is free,
+applied where the representation had been quietly enforcing the opposite.
 
 ### Phase 5 — Presented groups: planned
 

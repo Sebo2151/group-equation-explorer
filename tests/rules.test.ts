@@ -335,3 +335,64 @@ test('details are plain words, never TeX', () => {
     assert.doesNotMatch(reason, /[\\^{}]/, `${rule} reason leaked TeX: ${reason}`);
   }
 });
+
+/* ------------------------------------------------------------------ */
+/* Cancelling across a run                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Products are stored flat, so `(ab)^{-1}(ab)` is on the line as the three
+ * factors `(ab)^{-1}`, `a`, `b`. Cancelling has to see that as an instance of
+ * `x^{-1}x` — otherwise the storage format would be silently forbidding a
+ * proof, and the whole point of flattening is that associative rebracketing is
+ * free and never costs a step. Without this, socks-and-shoes cannot be derived
+ * from the axioms at all.
+ */
+test('cancelling matches a factor against the run it inverts', () => {
+  for (const source of ['(a b)^-1 a b', 'a b (a b)^-1', '(a b c)^-1 a b c', 'a b c (a b c)^-1']) {
+    const term = parseTerm(source);
+    const found = findTargets(term, 'cancel-inverse');
+    assert.equal(found.length, 1, `${source}: expected exactly one place, got ${found.length}`);
+    assert.equal(
+      termSource(applyRule(term, 'cancel-inverse', found[0]).term),
+      'e',
+      `${source} should cancel to the identity`,
+    );
+  }
+});
+
+test('cancelling a run leaves everything around it alone', () => {
+  const term = parseTerm('c (a b)^-1 a b d');
+  const found = findTargets(term, 'cancel-inverse');
+  assert.equal(found.length, 1);
+  assert.equal(termSource(applyRule(term, 'cancel-inverse', found[0]).term), 'c e d');
+});
+
+/**
+ * The generalisation must not become "any factors that happen to multiply out
+ * to the identity". It is one end of the run inverting exactly the rest, in
+ * order — nothing here is allowed to reorder factors or reason about products.
+ */
+test('cancelling refuses runs that are not one term against its own inverse', () => {
+  const cases: [string, number][] = [
+    // Right factors, wrong order: the group is not assumed commutative.
+    ['(a b)^-1 b a', 3],
+    // Only part of what the inverse covers.
+    ['(a b)^-1 a', 2],
+    // The inverse is not at either end of the run.
+    ['a (a b)^-1 b', 3],
+    /*
+     * This one does equal the identity, and still must not cancel in one move.
+     * Seeing that would mean reasoning about products rather than matching a
+     * term against its own inverse — the inner pair is there to be cancelled
+     * first, and that is the step the learner is meant to take.
+     */
+    ['b^-1 a^-1 a b', 4],
+  ];
+
+  for (const [source, length] of cases) {
+    const found = findTargets(parseTerm(source), 'cancel-inverse');
+    const wholeLine = found.some((target) => target.start === 0 && target.end === length - 1);
+    assert.equal(wholeLine, false, `${source} should not cancel in one move`);
+  }
+});

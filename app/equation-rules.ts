@@ -15,14 +15,16 @@
  */
 
 import { equation, subjectSpeech, type Equation } from './subject.ts';
-import { inverse, product, termSpeech } from './term.ts';
+import { hostFactors, inverse, product, termSpeech, termsEqual, type Term } from './term.ts';
 import type { RuleArgument } from './rules.ts';
 
 export type EquationRuleId =
   | 'symmetry'
   | 'left-multiply'
   | 'right-multiply'
-  | 'invert-both-sides';
+  | 'invert-both-sides'
+  | 'cancel-left'
+  | 'cancel-right';
 
 /**
  * Whether the rule's converse also holds.
@@ -180,7 +182,87 @@ const EQUATION_RULE_TABLE: Record<EquationRuleId, EquationRuleImplementation> = 
       };
     },
   },
+
+  /**
+   * Cancellation. Not an axiom and not free: these two exist only because the
+   * cancellation challenge derives them, and they are handed over there as the
+   * reward for that derivation. Before it, they are not in anyone's ruleset.
+   *
+   * Left and right stay separate for the same reason multiplication does. The
+   * group is not assumed abelian, so a shared factor at the front and a shared
+   * factor at the back are different situations, and a recorded step should say
+   * which one was used without a flag read alongside it.
+   *
+   * Stripping is by one factor, the outermost shared one, so `a b x = a b y`
+   * takes two steps rather than silently collapsing. A side that is left with
+   * nothing becomes the identity, which is correct: `a = a b` really does say
+   * `e = b`.
+   */
+  'cancel-left': {
+    id: 'cancel-left',
+    name: 'Cancel on the left',
+    family: 'equation',
+    reason: 'Left cancellation',
+    formula: 'wu=wv \\iff u=v',
+    spokenFormula: 'w times u equals w times v if and only if u equals v',
+    description: 'Drop a factor that both sides begin with.',
+    direction: 'iff',
+    needsTerm: false,
+    applies(subject) {
+      return sharedEnd(subject, 'front') !== null;
+    },
+    rewrite(subject) {
+      const shared = sharedEnd(subject, 'front')!;
+      return {
+        subject: equation(
+          product(hostFactors(subject.left).slice(1)),
+          product(hostFactors(subject.right).slice(1)),
+        ),
+        detail: `cancelling the ${termSpeech(shared)} both sides begin with`,
+      };
+    },
+  },
+
+  'cancel-right': {
+    id: 'cancel-right',
+    name: 'Cancel on the right',
+    family: 'equation',
+    reason: 'Right cancellation',
+    formula: 'uw=vw \\iff u=v',
+    spokenFormula: 'u times w equals v times w if and only if u equals v',
+    description: 'Drop a factor that both sides end with.',
+    direction: 'iff',
+    needsTerm: false,
+    applies(subject) {
+      return sharedEnd(subject, 'back') !== null;
+    },
+    rewrite(subject) {
+      const shared = sharedEnd(subject, 'back')!;
+      return {
+        subject: equation(
+          product(hostFactors(subject.left).slice(0, -1)),
+          product(hostFactors(subject.right).slice(0, -1)),
+        ),
+        detail: `cancelling the ${termSpeech(shared)} both sides end with`,
+      };
+    },
+  },
 };
+
+/**
+ * The factor both sides start or end with, or `null` when they do not agree
+ * there. Both sides must have one to give up: `x = x` cancels to `e = e`, which
+ * is true and reversible, but a side with no factors at all cannot.
+ */
+function sharedEnd(subject: Equation, which: 'front' | 'back'): Term | null {
+  const left = hostFactors(subject.left);
+  const right = hostFactors(subject.right);
+  if (left.length === 0 || right.length === 0) return null;
+
+  const pick = (factors: Term[]) => (which === 'front' ? factors[0] : factors[factors.length - 1]);
+  const candidate = pick(left);
+  return termsEqual(candidate, pick(right)) ? candidate : null;
+}
 
 export const EQUATION_RULES: EquationRuleDefinition[] = Object.values(EQUATION_RULE_TABLE).map(
   (rule) => ({

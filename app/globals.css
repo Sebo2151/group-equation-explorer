@@ -51,7 +51,9 @@ h1 { margin-bottom: 7px; font-size: clamp(1.72rem, 3.7vw, 2.85rem); line-height:
 h2 { margin-bottom: 0; font-size: 1.05rem; letter-spacing: -0.015em; }
 .subtitle { max-width: 670px; margin-bottom: 0; color: var(--muted); line-height: 1.5; }
 
-.top-actions { display: flex; gap: 7px; flex: 0 0 auto; }
+/* Wraps because the row grew a Hint control in Phase 4, and five buttons do
+   not fit a 320px viewport on one line. */
+.top-actions { display: flex; flex-wrap: wrap; gap: 7px; flex: 0 0 auto; }
 .tool-button, .reason-toggle {
   min-height: 39px;
   border: 1px solid var(--line);
@@ -64,6 +66,13 @@ h2 { margin-bottom: 0; font-size: 1.05rem; letter-spacing: -0.015em; }
 }
 .tool-button:hover:not(:disabled), .reason-toggle:hover { border-color: var(--line-strong); background: white; }
 .tool-button:disabled { cursor: not-allowed; opacity: 0.4; }
+.tool-button.is-primary {
+  border-color: var(--blue-deep);
+  background: var(--blue);
+  color: white;
+  box-shadow: 0 8px 20px rgba(47, 104, 201, 0.2);
+}
+.tool-button.is-primary:hover:not(:disabled) { border-color: var(--blue-deep); background: var(--blue-deep); }
 
 .challenge-banner {
   display: grid;
@@ -81,6 +90,16 @@ h2 { margin-bottom: 0; font-size: 1.05rem; letter-spacing: -0.015em; }
 .challenge-copy { min-width: 0; }
 .challenge-copy h2 { margin-bottom: 2px; font-size: 1.02rem; }
 .challenge-copy p:last-child { margin: 0; color: var(--muted); font-size: 0.86rem; }
+.challenge-copy .thinking-prompt {
+  width: fit-content;
+  margin-top: 7px;
+  border-radius: 7px;
+  background: var(--gold-soft);
+  padding: 5px 8px;
+  color: #765015;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
 .status-pill { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 999px; padding: 7px 10px; color: var(--muted); font-size: 0.77rem; font-weight: 800; white-space: nowrap; }
 .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 4px var(--gold-soft); }
 .status-pill.is-complete { border-color: #b8dcc6; background: var(--green-soft); color: var(--green); }
@@ -244,10 +263,14 @@ h2 { margin-bottom: 0; font-size: 1.05rem; letter-spacing: -0.015em; }
 .selection-note strong { color: var(--ink); }
 .selection-note span:last-child { line-height: 1.45; }
 .selection-swatch { flex: none; width: 19px; height: 19px; border: 2px solid var(--gold); border-radius: 5px; background: var(--gold-soft); }
-.success-note { border: 1px solid #b8dcc6; background: var(--green-soft); color: var(--green); }
+.success-note { border: 1px solid #b8dcc6; background: var(--green-soft); color: var(--green); animation: success-arrives 420ms ease-out both; }
 .success-mark { display: grid; width: 27px; height: 27px; place-items: center; border-radius: 50%; background: var(--green); color: white; font-weight: 900; }
 .success-note div { display: grid; gap: 1px; }
 .success-note span:last-child { font-size: 0.76rem; color: #426d53; }
+@keyframes success-arrives {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 
 .rules-card { padding: 18px; }
 .rules-heading { margin-bottom: 15px; }
@@ -354,6 +377,72 @@ h2 { margin-bottom: 0; font-size: 1.05rem; letter-spacing: -0.015em; }
 .topbar.is-menu h1 { margin: 0; }
 .topbar.is-menu h1:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; border-radius: 8px; }
 
+.course-spotlight {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(230px, 0.7fr);
+  gap: 18px;
+  margin-bottom: 16px;
+  border: 1px solid rgba(47, 104, 201, 0.28);
+  border-radius: calc(var(--radius) + 3px);
+  background:
+    radial-gradient(circle at 88% 16%, rgba(255, 255, 255, 0.48), transparent 12rem),
+    linear-gradient(135deg, #eaf1ff, #dfeaff 58%, #eef3ff);
+  padding: clamp(18px, 3vw, 28px);
+  box-shadow: 0 18px 48px rgba(47, 104, 201, 0.13);
+}
+.course-spotlight-copy { display: grid; align-content: start; justify-items: start; gap: 9px; }
+.course-spotlight-copy h2 { font-size: clamp(1.35rem, 2.5vw, 2rem); letter-spacing: -0.035em; }
+.course-spotlight-copy p:not(.eyebrow) { max-width: 48rem; margin: 0; color: #42536c; line-height: 1.55; }
+.course-spotlight-copy .tool-button { margin-top: 5px; }
+.course-progress {
+  display: grid;
+  align-content: center;
+  gap: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.5);
+  padding: 16px;
+}
+.course-progress-number { display: flex; align-items: baseline; gap: 7px; }
+.course-progress-number strong { color: var(--blue-deep); font-size: 2rem; line-height: 1; }
+.course-progress-number span, .course-progress p { color: #50617b; font-size: 0.76rem; font-weight: 700; }
+.course-progress p { margin: 0; }
+.course-progress-track { height: 9px; overflow: hidden; border-radius: 999px; background: rgba(29, 79, 158, 0.12); }
+.course-progress-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--blue), #6d89df); transition: width 360ms ease; }
+
+.chapter-list { display: grid; gap: 10px; margin-top: 2px; }
+.chapter-card { overflow: hidden; border: 1px solid var(--line); border-radius: 11px; background: rgba(255, 255, 255, 0.52); }
+.chapter-card summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 66px;
+  padding: 10px 13px;
+  cursor: pointer;
+  list-style: none;
+}
+.chapter-card summary::-webkit-details-marker { display: none; }
+.chapter-card summary:hover { background: rgba(47, 104, 201, 0.045); }
+.chapter-card summary:focus-visible { outline: 3px solid rgba(47, 104, 201, 0.35); outline-offset: -3px; }
+.chapter-index {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--blue-soft);
+  color: var(--blue-deep);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+.chapter-copy { display: grid; gap: 3px; min-width: 0; }
+.chapter-copy strong { font-size: 0.94rem; }
+.chapter-copy span { color: var(--muted); font-size: 0.78rem; line-height: 1.4; }
+.chapter-count { border-radius: 999px; background: var(--surface); padding: 4px 8px; color: var(--muted); font-size: 0.72rem; font-weight: 850; }
+.chapter-outcome { margin: 0; border-top: 1px solid var(--line); background: var(--gold-soft); padding: 9px 13px; color: #765015; font-size: 0.78rem; line-height: 1.45; }
+.chapter-card .challenge-list { border-top: 1px solid var(--line); }
+
 .challenge-list { display: grid; margin: 0; padding: 0; list-style: none; }
 .challenge-entry {
   display: flex;
@@ -385,6 +474,103 @@ h2 { margin-bottom: 0; font-size: 1.05rem; letter-spacing: -0.015em; }
 .challenge-entry-copy { display: grid; gap: 3px; min-width: 0; }
 .challenge-entry-copy strong { color: var(--ink); font-size: 0.92rem; }
 .challenge-entry-copy span { color: var(--muted); font-size: 0.81rem; line-height: 1.45; }
+
+/* ------------------------------------------------------------------ */
+/* Progress: locks, ticks, and what a proof scored                      */
+/* ------------------------------------------------------------------ */
+
+/* A finished challenge is marked in three ways at once, because a colour on
+   its own is not a signal: the badge becomes a tick, the badge changes colour,
+   and the line beneath the title says the length in words. */
+.challenge-entry.is-done .challenge-entry-number { background: var(--green-soft); color: var(--green); }
+.challenge-entry.is-locked { cursor: pointer; }
+.challenge-entry.is-locked .challenge-entry-copy strong,
+.challenge-entry.is-locked .challenge-entry-copy span { color: var(--muted); }
+.challenge-entry.is-locked .challenge-entry-number {
+  background: var(--surface);
+  border: 1px dashed var(--line-strong);
+  color: var(--line-strong);
+  font-size: 0.6rem;
+}
+.challenge-entry-score { color: var(--green) !important; font-size: 0.76rem !important; font-weight: 700; }
+
+.challenge-list li { position: relative; display: grid; }
+.challenge-entry-review {
+  justify-self: start;
+  margin: -6px 0 11px 64px;
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  padding: 2px 0;
+  font: inherit;
+  font-size: 0.78rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.challenge-entry-review:hover { color: var(--blue-deep); }
+.challenge-entry-review:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; border-radius: 4px; }
+
+.earned-list { display: grid; gap: 7px; margin: 12px 0 0; padding: 0; list-style: none; }
+.earned-law {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--green-soft);
+  padding: 8px 11px;
+}
+.earned-law strong { color: var(--ink); font-size: 0.85rem; }
+.earned-law span { color: var(--green); font-size: 0.77rem; }
+
+.success-score, .success-earned, .success-takeaway { display: block; margin-top: 5px; font-size: 0.8rem; }
+.success-earned { color: var(--gold); font-weight: 700; }
+.success-takeaway { max-width: 40rem; line-height: 1.45; }
+.success-actions { display: flex !important; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+.success-actions .tool-button { min-height: 34px; font-size: 0.75rem; }
+
+.rule-provenance {
+  justify-self: start;
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--green);
+  padding: 2px 8px;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------------------ */
+/* Hints                                                                */
+/* ------------------------------------------------------------------ */
+
+/* Gold rather than blue: a hint is neither the proof nor a control that acts
+   on it, and it should not read as either. */
+.hint-card {
+  display: grid;
+  gap: 9px;
+  border: 1px solid #e6cf9c;
+  border-radius: var(--radius);
+  background: var(--gold-soft);
+  padding: 14px 16px;
+}
+.hint-card .eyebrow { color: var(--gold); }
+.hint-text { margin: 0; color: var(--ink); font-size: 0.9rem; line-height: 1.55; }
+.hint-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.hint-route { border-top: 1px solid #e6cf9c; padding-top: 11px; }
+.hint-route-lead { margin: 0 0 9px; color: var(--gold); font-size: 0.79rem; }
+
+.tool-button.is-hint { border-color: #e6cf9c; background: var(--gold-soft); color: var(--gold); }
+
+/* ------------------------------------------------------------------ */
+/* Reading a recorded proof                                             */
+/* ------------------------------------------------------------------ */
+
+.recorded-proof { display: grid; gap: 4px; }
+.proof-line.is-recorded { align-items: baseline; }
+.proof-paper.is-reading { margin-top: 12px; }
+.recorded-missing { margin: 0; color: var(--muted); font-size: 0.85rem; }
 
 .help { display: grid; gap: 4px; margin-top: 12px; color: var(--ink); }
 .help h3 { margin: 10px 0 0; font-size: 0.86rem; }
@@ -460,6 +646,9 @@ footer p { margin: 0; }
   .rule-description { display: none; }
   .rule-formula { font-size: 0.92rem; }
   .selection-note, .success-note { margin: 22px 0 0; }
+  .course-spotlight { grid-template-columns: minmax(0, 1fr); }
+  .course-progress { grid-template-columns: auto minmax(0, 1fr); align-items: center; }
+  .course-progress p { grid-column: 1 / -1; }
 }
 
 @media (max-width: 540px) {
@@ -474,6 +663,11 @@ footer p { margin: 0; }
   .free-fields { grid-template-columns: minmax(0, 1fr); }
   .challenge-entry { padding: 12px 14px; }
   .menu-card > :not(.section-heading):not(.challenge-list) { margin-inline: 14px; }
+  .course-spotlight { padding: 17px; }
+  .course-progress { grid-template-columns: minmax(0, 1fr); }
+  .course-progress p { grid-column: auto; }
+  .chapter-card summary { grid-template-columns: auto minmax(0, 1fr); }
+  .chapter-count { grid-column: 2; justify-self: start; }
   .factor.is-atom { min-width: 33px; padding-inline: 4px; }
   .target { min-height: 44px; margin: 0 1px; }
   .whole-line { min-height: 44px; }
@@ -484,4 +678,5 @@ footer p { margin: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+  .success-note { animation: none; }
 }

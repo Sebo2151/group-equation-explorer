@@ -23,13 +23,14 @@ import {
   type ProofState,
 } from '../app/proof.ts';
 import type { AnyRuleId } from '../app/catalogue.ts';
+import { exactGoal } from '../app/goal.ts';
 import { expression, subjectSource, type Address } from '../app/subject.ts';
 import { type Target } from '../app/term.ts';
 
 const OPENING: ProofSetup = {
   challenge: 'cancel-pairs',
   start: expression(parseTerm('a a^-1 b c^-1 c')),
-  goal: expression(parseTerm('b')),
+  goal: exactGoal(expression(parseTerm('b'))),
   ruleset: ['cancel-inverse', 'remove-identity'],
 };
 
@@ -198,7 +199,7 @@ test('completion compares terms, not rendered notation', () => {
   const toIdentity = createProof({
     challenge: 'free',
     start: expression(parseTerm('a a^-1')),
-    goal: expression(parseTerm('e')),
+    goal: exactGoal(expression(parseTerm('e'))),
     ruleset: ['cancel-inverse'],
   });
   assert.equal(isComplete(toIdentity), false);

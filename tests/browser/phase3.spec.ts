@@ -262,10 +262,10 @@ test.describe('narrow viewport', () => {
 
 const CHALLENGE_LABEL: Record<string, string> = {
   'cancel-pairs': '01',
-  'solve-left': '07',
-  'solve-right': '08',
-  'inverses-of-equals': '10',
-  cancellation: '11',
+  'solve-left': '11',
+  'solve-right': '12',
+  'inverses-of-equals': '14',
+  cancellation: '15',
 };
 
 /**
@@ -347,7 +347,7 @@ test('an equation is not a term to multiply by', async ({ page }) => {
 
 /* Complete proofs through the interface ---------------------------------- */
 
-test('challenge 07 can be solved for x, end to end', async ({ page }) => {
+test('the solve-for-x challenge can be solved end to end', async ({ page }) => {
   await chooseChallenge(page, 'solve-left');
 
   await selectLaw(page, 'Multiply on the left');
@@ -368,7 +368,7 @@ test('challenge 07 can be solved for x, end to end', async ({ page }) => {
   await expect(page.locator('.status-pill')).toContainText('3 steps');
 });
 
-test('challenge 10 inverts both sides and reverses the product', async ({ page }) => {
+test('the inverses-of-equals challenge reverses the product', async ({ page }) => {
   await chooseChallenge(page, 'inverses-of-equals');
 
   await selectLaw(page, 'Invert both sides');
@@ -381,15 +381,19 @@ test('challenge 10 inverts both sides and reverses the product', async ({ page }
   await expect(page.locator('.status-pill')).toHaveClass(/is-complete/);
 });
 
-test('the cancellation law is a challenge, not a law in the catalogue', async ({ page }) => {
+/**
+ * Cancellation became a law in Phase 4, earned by proving it. The invariant
+ * this protects is unchanged and is the whole point of that arrangement: the
+ * challenge that proves it must not be handed it.
+ */
+test('the challenge that proves cancellation is not given cancellation', async ({ page }) => {
   await chooseChallenge(page, 'cancellation');
 
-  // Nothing in the dock may already do the thing being proved.
   const laws = await page
     .getByRole('complementary')
     .getByRole('button')
     .evaluateAll((els) => els.map((el) => el.getAttribute('aria-label') ?? ''));
-  expect(laws.join(' | ')).not.toMatch(/cancel a common factor/i);
+  expect(laws.join(' | ')).not.toMatch(/cancel on the (left|right)/i);
 
   await expect(page.locator('.status-pill')).not.toHaveClass(/is-complete/);
 });
@@ -407,7 +411,7 @@ const SOLVE_RECORD = {
   version: PROOF_VERSION,
   challenge: 'solve-left',
   start: 'a x = b',
-  goal: 'x = a^-1 b',
+  goal: { isolate: 'x', side: 'left' },
   ruleset: ['left-multiply', 'cancel-inverse', 'remove-identity'],
   steps: [
     { rule: 'left-multiply', term: 'a^-1' },

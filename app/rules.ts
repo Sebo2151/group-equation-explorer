@@ -15,11 +15,11 @@
 import {
   getNode,
   hostFactors,
+  cancelsToIdentity,
   hosts,
   identity,
   inverse,
   isGap,
-  isInversePair,
   MAX_EXPONENT,
   MAX_NODES,
   nodeCount,
@@ -186,18 +186,25 @@ const RULE_TABLE: Record<RuleId, RuleImplementation> = {
     reason: 'Inverse law',
     formula: 'xx^{-1}=e=x^{-1}x',
     spokenFormula: 'x times x inverse equals the identity equals x inverse times x',
-    description: 'Replace two adjacent factors that are inverses of each other by the identity.',
+    description:
+      'Replace a run of adjacent factors by the identity, when one end of it is the inverse of the rest.',
     attachesToGaps: false,
     needsTerm: false,
     targets(root) {
-      return spanTargets(root, 2, (span) => span.length === 2 && isInversePair(span[0], span[1]));
+      return spanTargets(root, 2, cancelsToIdentity);
     },
     rewrite(root, target) {
-      const [left, right] = spanTerms(root, target);
-      return {
-        term: replacement(root, target, [identity()]),
-        detail: `${termSpeech(left)} times ${termSpeech(right)} is the identity`,
-      };
+      const span = spanTerms(root, target);
+      // Say which end did the inverting. `(ab)^-1 a b` reads better as "a b
+      // inverse times a b" than as a list of the three factors on the line.
+      const first = span[0];
+      const detail =
+        first.kind === 'inverse' && span.length > 2
+          ? `${termSpeech(first)} times ${spanSpeech(span.slice(1))} is the identity`
+          : span.length > 2
+            ? `${spanSpeech(span.slice(0, -1))} times ${termSpeech(span[span.length - 1])} is the identity`
+            : `${termSpeech(span[0])} times ${termSpeech(span[1])} is the identity`;
+      return { term: replacement(root, target, [identity()]), detail };
     },
   },
 

@@ -1,22 +1,46 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import katex from 'katex';
+import { FieldPreview, mathHtml, Typeset } from './math-view.tsx';
+import { HelpText } from './help-text.tsx';
 import {
+  benchmarkSteps,
   CHALLENGES,
+  COURSE_CHAPTERS,
   challengeById,
   challengeSetup,
   FREE_CHALLENGE_ID,
   freeSetup,
+  grantedBy,
+  type Challenge,
 } from './challenges.ts';
+import { MAX_HINT_LEVEL, hintFor, referenceLines, rejoinDepth, type Hint } from './hints.ts';
 import {
   MENU,
   isProofDestination,
+  isReadingDestination,
   locationHash,
   parseLocation,
   type Destination,
 } from './navigation.ts';
+import {
+  bestFor,
+  completedCount,
+  earnedRules,
+  emptyProgress,
+  isChallengeComplete,
+  isUnlocked,
+  nextChallenge,
+  progressToJson,
+  recordProof,
+  requiredChallenge,
+  standing,
+  type Progress,
+} from './progress.ts';
+import { clearProgress, loadProgress, saveProgress } from './storage.ts';
+import { exactGoal, goalProse, goalSpeech, goalTex } from './goal.ts';
 import { parseSubject, tryParseSubject } from './parse.ts';
+import { type RuleArgument } from './rules.ts';
 import {
   applyRule,
   canRedo,
@@ -49,6 +73,7 @@ import {
 } from './catalogue.ts';
 import {
   importProof,
+  importProofRecord,
   proofFromHash,
   proofToHash,
   proofToJson,
@@ -57,7 +82,6 @@ import {
 import {
   sideTerm,
   subjectSpeech,
-  subjectTex,
   type Address,
   type Subject,
 } from './subject.ts';
@@ -71,46 +95,6 @@ import {
   type Target,
   type Term,
 } from './term.ts';
-
-/**
- * `output: 'html'` emits only KaTeX's visual layer, which KaTeX marks
- * aria-hidden. Every accessible name therefore comes from the spoken forms in
- * `term.ts` rather than from TeX source or duplicated MathML. `trust` and the
- * expansion limits are pinned explicitly so the policy is reviewable in one
- * place: parsed input now reaches this renderer, though only after
- * `GENERATOR_PATTERN` has restricted what a name may contain.
- */
-function mathHtml(tex: string) {
-  return {
-    __html: katex.renderToString(tex, {
-      displayMode: false,
-      throwOnError: false,
-      strict: 'ignore',
-      trust: false,
-      maxSize: 12,
-      maxExpand: 100,
-      output: 'html',
-    }),
-  };
-}
-
-function Typeset({ tex, speech }: { tex: string; speech: string }) {
-  return (
-    <>
-      <span aria-hidden="true" dangerouslySetInnerHTML={mathHtml(tex)} />
-      <span className="sr-only">{speech}</span>
-    </>
-  );
-}
-
-/** A subject typeset as a single run, with no grid and no controls. */
-function StaticSubject({ subject }: { subject: Subject }) {
-  return (
-    <span className="static-math" role="math" aria-label={subjectSpeech(subject)}>
-      <span aria-hidden="true" dangerouslySetInnerHTML={mathHtml(subjectTex(subject))} />
-    </span>
-  );
-}
 
 /**
  * The tokens of an expression, laid out on the shared column grid.
@@ -420,6 +404,37 @@ function ProofLineView({
   );
 }
 
+/**
+ * A proof read back rather than worked: every line, every reason, no controls.
+ *
+ * Used for two things that are the same thing seen twice — the worked route a
+ * hint offers to show, and a finished proof of your own reopened from the menu.
+ * Nothing here is interactive, so no brackets are drawn and no law is
+ * selectable; the reasons still open, because a proof you cannot ask "why" of
+ * is a list rather than an argument.
+ */
+function RecordedProof({ state }: { state: ProofState | null }) {
+  if (!state) return <p className="recorded-missing">This proof is not available.</p>;
+
+  return (
+    <div className="recorded-proof">
+      {visibleLines(state).map((entry, index) => (
+        <div className="proof-line is-recorded" key={index}>
+          <span className="relation" aria-hidden="true">
+            {index === 0 ? '' : entry.subject.kind === 'equation' ? '⇔' : '='}
+          </span>
+          <ProofLineView
+            detail={entry.step?.detail}
+            interactive={null}
+            reason={entry.step?.reason}
+            subject={entry.subject}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* The page                                                            */
 /* ------------------------------------------------------------------ */
@@ -461,6 +476,23 @@ function steps(count: number): string {
   return `${count} ${count === 1 ? 'step' : 'steps'}`;
 }
 
+/**
+ * What the length of this proof means.
+ *
+ * The benchmark is the proof the challenge was authored with, and nothing more
+ * than that: a shorter one is "shorter than the one we know", never "the
+ * shortest there is". Claiming a global minimum would need an exhaustive search
+ * this app does not do, so it is not claimed.
+ */
+function scoreLine(challenge: Challenge, taken: number, best: number | undefined): string {
+  const benchmark = benchmarkSteps(challenge);
+  const mine = `${steps(taken)}; the proof this app ships with takes ${steps(benchmark)}`;
+  const shorter = taken < benchmark ? ', so yours is shorter' : '';
+  const previous =
+    best !== undefined && best < taken ? `. Your best here is ${steps(best)}` : '';
+  return `${mine}${shorter}${previous}.`;
+}
+
 export default function Home() {
   const [proof, setProof] = useState(() => createProof(challengeSetup(CHALLENGES[0])));
   const [selectedRule, setSelectedRule] = useState<AnyRuleId>(CHALLENGES[0].rules[0]);
@@ -474,12 +506,28 @@ export default function Home() {
   const [notice, setNotice] = useState<Notice>(null);
 
   /**
+   * Progress starts empty and is filled in after mount. The server has no
+   * storage to read, so rendering anything else first would mean the menu
+   * changing under the learner on hydration.
+   */
+  const [progress, setProgress] = useState<Progress>(emptyProgress);
+  const [discarded, setDiscarded] = useState<string[]>([]);
+  const [storageFailed, setStorageFailed] = useState(false);
+  /** How many times a hint has been asked for on this line. Zero is none. */
+  const [hintLevel, setHintLevel] = useState(0);
+  const [routeOpen, setRouteOpen] = useState(false);
+
+  /**
    * The app opens on the menu, so that is what the server renders. There is no
    * fragment on the server, and reading one during the render would make the
    * first paint depend on something the server cannot see.
    */
   const [destination, setDestination] = useState<Destination>(MENU);
-  const view = isProofDestination(destination) ? 'proof' : 'menu';
+  const view = isProofDestination(destination)
+    ? 'proof'
+    : isReadingDestination(destination)
+      ? 'reading'
+      : 'menu';
 
   const dockRef = useRef<HTMLElement | null>(null);
   const currentRef = useRef<HTMLDivElement | null>(null);
@@ -491,6 +539,9 @@ export default function Home() {
   // Read by the fragment handler, which must not be torn down and rebuilt on
   // every step just to see the current proof.
   const proofRef = useRef<ProofState | null>(null);
+  // Same reason: the handler must be able to see what has been unlocked
+  // without being rebuilt every time a challenge is finished.
+  const progressRef = useRef<Progress>(emptyProgress());
 
   // Declared before the fragment handler so that it has already run when that
   // handler first fires, and kept out of the render body: a ref may not be
@@ -499,10 +550,75 @@ export default function Home() {
     proofRef.current = proof;
   }, [proof]);
 
+  useEffect(() => {
+    progressRef.current = progress;
+  }, [progress]);
+
   const line = currentLine(proof);
   const complete = isComplete(proof);
   const rule = anyRuleById(selectedRule);
   const challenge = challengeById(proof.challenge);
+  const challengePosition = challenge
+    ? CHALLENGES.findIndex((entry) => entry.id === challenge.id)
+    : -1;
+  const nextCourseChallenge =
+    challengePosition >= 0 ? CHALLENGES[challengePosition + 1] : undefined;
+
+  /**
+   * Read what this device remembers, once, after mount.
+   *
+   * Every stored proof is replayed on the way in, so what comes back is
+   * progress that has been checked rather than progress that was claimed. A
+   * record that no longer holds up is named rather than silently dropped: a
+   * learner who finished something and then sees it un-finished deserves to
+   * know why.
+   */
+  useEffect(() => {
+    const reading = loadProgress();
+    if (!reading) return;
+    /*
+     * Setting state straight from an effect is normally worth avoiding, and the
+     * rule is disabled here deliberately rather than worked around. This is the
+     * one case it describes as legitimate: reading an external system the
+     * server cannot see. It has to happen after mount — the first render must
+     * match the one the server produced, and the server has no storage — and it
+     * happens exactly once.
+     */
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setProgress(reading.progress);
+    setDiscarded(reading.discarded);
+  }, []);
+
+
+  const hint: Hint | null = hintLevel > 0 ? hintFor(proof, hintLevel) : null;
+
+  /**
+   * A finished proof of the learner's own, rebuilt from what was stored.
+   *
+   * It is replayed rather than displayed from a cached rendering, for the same
+   * reason it was replayed on the way in: the only thing that makes a stored
+   * proof worth looking at is that it still checks out.
+   */
+  const readingChallenge =
+    destination.view === 'best' ? challengeById(destination.id) : undefined;
+
+  const recordedProof = useMemo(() => {
+    if (destination.view !== 'best') return null;
+    const record = bestFor(progress, destination.id)?.record;
+    if (!record) return null;
+    try {
+      return importProofRecord(record);
+    } catch {
+      return null;
+    }
+  }, [destination, progress]);
+
+  /** The worked route, built only when the learner asks to see it. */
+  const referenceProof = useMemo(
+    () => (routeOpen && challenge ? referenceLines(challenge) : null),
+    [challenge, routeOpen],
+  );
+  const earned = useMemo(() => new Set(earnedRules(progress)), [progress]);
 
   /**
    * Every place the selected law applies on this line, in reading order. The
@@ -570,22 +686,51 @@ export default function Home() {
     (firstTargetRef.current ?? successRef.current ?? currentRef.current)?.focus({ preventScroll: true });
   }, [proof, addresses]);
 
+  /**
+   * Show a new proof state.
+   *
+   * Everything that changes the proof comes through here, which is what lets
+   * two things be said once rather than at every call site: a finished
+   * challenge is recorded, and the hints start over, because a new line is a
+   * new question and however much was given away about the last one should not
+   * carry across to it.
+   */
+  const commit = useCallback((next: ProofState) => {
+    setProof(next);
+    setHintLevel(0);
+    setRouteOpen(false);
+
+    if (!isComplete(next)) return;
+
+    // Read through the ref, not through render state: two finishing moves in
+    // quick succession must both see the progress the first one wrote.
+    const updated = recordProof(progressRef.current, next);
+    if (updated === progressRef.current) return;
+    progressRef.current = updated;
+    setProgress(updated);
+    if (!saveProgress(updated)) setStorageFailed(true);
+  }, []);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing || isEditingText(event.target)) return;
       if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z') return;
       event.preventDefault();
-      setProof(event.shiftKey ? redo : undo);
+      const state = proofRef.current;
+      if (state) commit(event.shiftKey ? redo(state) : undo(state));
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [commit]);
 
-  const open = useCallback((next: ProofState, message?: Notice) => {
-    setProof(next);
-    setSelectedRule(next.ruleset[0]);
-    setNotice(message ?? null);
-  }, []);
+  const open = useCallback(
+    (next: ProofState, message?: Notice) => {
+      commit(next);
+      setSelectedRule(next.ruleset[0]);
+      setNotice(message ?? null);
+    },
+    [commit],
+  );
 
   /**
    * Go where the fragment says, at mount and whenever it changes.
@@ -626,7 +771,10 @@ export default function Home() {
         open(
           lastFreeProof.current ??
             createProof(
-              freeSetup(parseSubject(DEFAULT_FREE_START), parseSubject(DEFAULT_FREE_GOAL)),
+              freeSetup(
+                parseSubject(DEFAULT_FREE_START),
+                exactGoal(parseSubject(DEFAULT_FREE_GOAL)),
+              ),
             ),
         );
         return;
@@ -635,7 +783,27 @@ export default function Home() {
       if (target.view === 'challenge') {
         if (current?.challenge === target.id) return;
         const found = challengeById(target.id);
-        if (found) open(createProof(challengeSetup(found)));
+        if (!found) return;
+
+        /*
+         * A link opens whatever it names, even something the menu still has
+         * locked. Somebody meant to send it — a teacher pointing a class at one
+         * problem, or a learner returning to a bookmark — and refusing would
+         * make challenges unlinkable, which is the one thing the menu shell was
+         * built to guarantee. The order is still worth saying out loud, so the
+         * learner knows they are ahead of it rather than lost.
+         */
+        const ahead = !isUnlocked(progressRef.current, target.id);
+        const before = found.requires ? challengeById(found.requires) : undefined;
+        open(
+          createProof(challengeSetup(found)),
+          ahead && before
+            ? {
+                tone: 'ok',
+                text: `You have jumped ahead: this one normally opens once "${before.title}" is done.`,
+              }
+            : null,
+        );
       }
     };
 
@@ -673,14 +841,19 @@ export default function Home() {
   }, []);
 
   /**
-   * Coming back to the menu should land the learner on it, rather than leaving
-   * focus on a control that is no longer rendered. Only on the way back,
-   * though: focusing the heading on first load would ring it for someone who
-   * has not pressed anything.
+   * Arriving somewhere should land the learner on it, rather than leaving focus
+   * on a control that is no longer rendered.
+   *
+   * `menuRef` is on the heading of whichever of the two non-proof screens is
+   * showing — the menu, or a proof being read back — so one effect covers both
+   * arrivals. The proof screen is left alone: it moves focus itself, to the
+   * next thing there is to act on. And nothing fires on first load, because
+   * focusing a heading for somebody who has not pressed anything would announce
+   * a move they did not make.
    */
   const previousView = useRef(view);
   useEffect(() => {
-    if (previousView.current === 'proof' && view === 'menu') {
+    if (previousView.current !== view && view !== 'proof') {
       menuRef.current?.focus({ preventScroll: true });
     }
     previousView.current = view;
@@ -696,14 +869,59 @@ export default function Home() {
       try {
         const next = applyRule(proof, selectedRule, address, argument);
         moved.current = true;
-        setProof(next);
+        commit(next);
         setNotice(null);
       } catch (error) {
         setNotice({ tone: 'error', text: (error as Error).message });
       }
     },
-    [insertParse, inverseFirst, proof, rule.needsTerm, selectedRule],
+    [commit, insertParse, inverseFirst, proof, rule.needsTerm, selectedRule],
   );
+
+  /**
+   * Take the move a level-three hint is offering. It goes through exactly the
+   * same path a clicked bracket does, so a hinted step is an ordinary step: it
+   * is recorded, it counts, and it can be undone.
+   */
+  const takeHint = useCallback(
+    (offer: { rule: AnyRuleId; address: Address; argument?: RuleArgument }) => {
+      try {
+        const next = applyRule(proof, offer.rule, offer.address, offer.argument);
+        moved.current = true;
+        commit(next);
+        setSelectedRule(offer.rule);
+        setNotice(null);
+      } catch (error) {
+        setNotice({ tone: 'error', text: (error as Error).message });
+      }
+    },
+    [commit, proof],
+  );
+
+  /** Step back to the last line that is on the route the hints know. */
+  const rejoinRoute = useCallback(() => {
+    const depth = rejoinDepth(proof);
+    if (depth === null || depth === 0) return;
+    let back = proof;
+    for (let count = 0; count < depth; count += 1) back = undo(back);
+    commit(back);
+  }, [commit, proof]);
+
+  const resetProgress = useCallback(() => {
+    const cleared = emptyProgress();
+    setProgress(cleared);
+    setDiscarded([]);
+    if (clearProgress()) {
+      setStorageFailed(false);
+      setNotice({ tone: 'ok', text: 'Progress on this device has been cleared.' });
+    } else {
+      setStorageFailed(true);
+      setNotice({
+        tone: 'error',
+        text: 'The course is reset for now, but this browser would not remove the saved copy. It may return after a reload.',
+      });
+    }
+  }, []);
 
   const startFree = () => {
     const start = tryParseSubject(freeStart, 'expression');
@@ -729,7 +947,7 @@ export default function Home() {
       });
       return;
     }
-    open(createProof(freeSetup(start.subject, goal)), {
+    open(createProof(freeSetup(start.subject, goal ? exactGoal(goal) : null)), {
       tone: 'ok',
       text: 'Free exploration ready.',
     });
@@ -794,6 +1012,7 @@ export default function Home() {
     <main className={`app-shell is-${view}`}>
       {view === 'menu' ? (
         <MenuScreen
+          discarded={discarded}
           freeGoal={freeGoal}
           freeStart={freeStart}
           helpOpen={destination.view === 'help'}
@@ -801,11 +1020,22 @@ export default function Home() {
           menuRef={menuRef}
           navigate={navigate}
           notice={notice}
+          onCopyProgress={() => copy('Progress', () => progressToJson(progress))}
           onImport={runImport}
+          onReset={resetProgress}
           onStartFree={startFree}
+          progress={progress}
           setFreeGoal={setFreeGoal}
           setFreeStart={setFreeStart}
           setImportText={setImportText}
+          storageFailed={storageFailed}
+        />
+      ) : view === 'reading' ? (
+        <ReadingScreen
+          challenge={readingChallenge}
+          menuRef={menuRef}
+          navigate={navigate}
+          state={recordedProof}
         />
       ) : (
       <>
@@ -827,7 +1057,7 @@ export default function Home() {
           <button
             className="tool-button"
             type="button"
-            onClick={() => setProof(undo)}
+            onClick={() => commit(undo(proof))}
             disabled={!canUndo(proof)}
           >
             Undo
@@ -835,7 +1065,7 @@ export default function Home() {
           <button
             className="tool-button"
             type="button"
-            onClick={() => setProof(redo)}
+            onClick={() => commit(redo(proof))}
             disabled={!canRedo(proof)}
           >
             Redo
@@ -843,6 +1073,19 @@ export default function Home() {
           <button className="tool-button" type="button" onClick={() => open(restart(proof))}>
             Restart
           </button>
+          {/* Only where there is a worked route to draw a hint from. Free
+              exploration has no intended answer, so offering a control that
+              could only ever decline would be worse than not offering it. */}
+          {challenge && !complete && (
+            <button
+              className="tool-button is-hint"
+              type="button"
+              aria-expanded={hintLevel > 0}
+              onClick={() => setHintLevel((level) => (level === 0 ? 1 : 0))}
+            >
+              {hintLevel > 0 ? 'Hide hint' : 'Hint'}
+            </button>
+          )}
           <button
             aria-expanded={shareOpen}
             className="tool-button"
@@ -858,15 +1101,20 @@ export default function Home() {
         <div className="challenge-number">{challenge?.label ?? '··'}</div>
         <div className="challenge-copy">
           <h2 id="challenge-title">
-            {proof.goal ? (
+            {proof.goal?.kind === 'exact' ? (
               <>
-                Reach <Typeset tex={subjectTex(proof.goal)} speech={subjectSpeech(proof.goal)} />
+                Reach <Typeset tex={goalTex(proof.goal)} speech={goalSpeech(proof.goal)} />
               </>
             ) : (
-              'No target. Rewrite it however you like.'
+              goalProse(proof.goal ?? null)
             )}
           </h2>
           <p>{challenge?.blurb ?? 'Every law is available.'}</p>
+          {challenge && !complete && (
+            <p className="thinking-prompt">
+              <strong>Think first:</strong> {challenge.prompt}
+            </p>
+          )}
         </div>
         <div className={`status-pill ${complete ? 'is-complete' : ''}`} role="status">
           <span className="status-dot" />
@@ -897,6 +1145,65 @@ export default function Home() {
         <p className={`notice is-${notice.tone}`} role="status">
           {notice.text}
         </p>
+      )}
+
+      {hint && challenge && (
+        <section className="hint-card" aria-labelledby="hint-heading">
+          <p className="eyebrow" id="hint-heading">
+            {hint.kind === 'step' ? `Hint ${hint.level} of ${MAX_HINT_LEVEL}` : 'Hint'}
+          </p>
+          {/* Polite rather than assertive: a hint is something the learner
+              asked for and is already looking at, not an interruption. */}
+          <p className="hint-text" aria-live="polite">
+            {hint.text}
+          </p>
+
+          {hint.kind === 'diverged' && routeOpen && (
+            <div className="hint-route">
+              <p className="hint-route-lead">
+                The route this app knows, from the beginning. Yours may still be shorter.
+              </p>
+              <RecordedProof state={referenceProof} />
+            </div>
+          )}
+
+          <div className="hint-actions">
+            {hint.kind === 'step' && hint.more && (
+              <button
+                className="tool-button"
+                type="button"
+                onClick={() => setHintLevel((level) => level + 1)}
+              >
+                Tell me more
+              </button>
+            )}
+            {hint.kind === 'step' && hint.offer && (
+              <button className="tool-button" type="button" onClick={() => takeHint(hint.offer!)}>
+                Take this step
+              </button>
+            )}
+            {hint.kind === 'diverged' && (
+              <>
+                <button
+                  aria-expanded={routeOpen}
+                  className="tool-button"
+                  type="button"
+                  onClick={() => setRouteOpen((open) => !open)}
+                >
+                  {routeOpen ? 'Hide the route I know' : 'Show the route I know'}
+                </button>
+                {hint.canRejoin && rejoinDepth(proof) !== null && (
+                  <button className="tool-button" type="button" onClick={rejoinRoute}>
+                    Step back onto it
+                  </button>
+                )}
+              </>
+            )}
+            <button className="tool-button" type="button" onClick={() => setHintLevel(0)}>
+              Hide
+            </button>
+          </div>
+        </section>
       )}
 
       <div className="workspace">
@@ -983,6 +1290,45 @@ export default function Home() {
                       {line.subject.kind === 'equation' ? 'Equation solved' : 'Expression simplified'}
                     </strong>
                     <span>Every step was justified by a law.</span>
+                    {challenge && (
+                      <span className="success-score">
+                        {scoreLine(challenge, stepCount(proof), bestFor(progress, challenge.id)?.steps)}
+                      </span>
+                    )}
+                    {/* Said once, here, where it was earned — rather than only
+                        appearing silently in the law list next time. */}
+                    {challenge?.grants?.length ? (
+                      <span className="success-earned">
+                        Earned:{' '}
+                        {challenge.grants.map((granted) => anyRuleById(granted).name).join(' and ')}.
+                        {' '}
+                        {challenge.grants.length === 1 ? 'It is' : 'They are'} yours to use from here
+                        on.
+                      </span>
+                    ) : null}
+                    {challenge && (
+                      <span className="success-takeaway">
+                        <strong>Takeaway:</strong> {challenge.takeaway}
+                      </span>
+                    )}
+                    {challenge && (
+                      <span className="success-actions">
+                        {nextCourseChallenge && (
+                          <button
+                            className="tool-button is-primary"
+                            type="button"
+                            onClick={() =>
+                              navigate({ view: 'challenge', id: nextCourseChallenge.id })
+                            }
+                          >
+                            Next challenge
+                          </button>
+                        )}
+                        <button className="tool-button" type="button" onClick={() => navigate(MENU)}>
+                          Course overview
+                        </button>
+                      </span>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -1059,9 +1405,16 @@ export default function Home() {
                   .map((entry) => {
                     const count = complete ? 0 : findAddresses(line.subject, entry.id).length;
                     const active = selectedRule === entry.id;
+                    // Where a derived law came from, so it never reads as
+                    // something that was simply always true by decree.
+                    const from = grantedBy(entry.id);
+                    const provenance =
+                      from && earned.has(entry.id) ? `proved in challenge ${from.label}` : null;
                     return (
                       <button
-                        aria-label={`${entry.name}, ${describeReach(entry, count)}`}
+                        aria-label={`${entry.name}, ${describeReach(entry, count)}${
+                          provenance ? `, ${provenance}` : ''
+                        }`}
                         aria-pressed={active}
                         className={`rule-card ${active ? 'is-active' : ''}`}
                         key={entry.id}
@@ -1078,6 +1431,11 @@ export default function Home() {
                           <Typeset tex={entry.formula} speech={entry.spokenFormula} />
                         </span>
                         <span className="rule-description">{entry.description}</span>
+                        {provenance && (
+                          <span aria-hidden="true" className="rule-provenance">
+                            {provenance}
+                          </span>
+                        )}
                       </button>
                     );
                   })}
@@ -1094,6 +1452,71 @@ export default function Home() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Reading a proof back                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A finished proof of your own, reopened.
+ *
+ * Deliberately a third screen rather than the workbench with its controls
+ * hidden. There is nothing here to choose and nothing to apply, and a law dock
+ * that could not be used would only invite the question of why not.
+ */
+function ReadingScreen({
+  challenge,
+  menuRef,
+  navigate,
+  state,
+}: {
+  challenge: Challenge | undefined;
+  menuRef: React.RefObject<HTMLHeadingElement | null>;
+  navigate: (destination: Destination) => void;
+  state: ProofState | null;
+}) {
+  return (
+    <>
+      <header className="topbar">
+        <div className="topbar-lead">
+          <button className="tool-button is-back" type="button" onClick={() => navigate(MENU)}>
+            Menu
+          </button>
+          <div>
+            <p className="eyebrow">
+              {challenge ? `Your proof of challenge ${challenge.label}` : 'Your proof'}
+            </p>
+            <h1 ref={menuRef} tabIndex={-1}>
+              {challenge?.title ?? 'A finished proof'}
+            </h1>
+          </div>
+        </div>
+        {challenge && (
+          <div className="top-actions">
+            <button
+              className="tool-button"
+              type="button"
+              onClick={() => navigate({ view: 'challenge', id: challenge.id })}
+            >
+              Work it again
+            </button>
+          </div>
+        )}
+      </header>
+
+      <section className="menu-card" aria-label="The proof you recorded">
+        <p className="menu-lead">
+          {state
+            ? `Every step here was checked again just now, against the same laws that were available when you wrote it. ${steps(stepCount(state))}.`
+            : 'There is no recorded proof of this challenge on this device.'}
+        </p>
+        <div className="proof-paper is-reading">
+          <RecordedProof state={state} />
+        </div>
+      </section>
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* The menu                                                            */
 /* ------------------------------------------------------------------ */
 
@@ -1106,6 +1529,7 @@ export default function Home() {
  * proof sheet with only the proof, the laws, and the controls that act on it.
  */
 function MenuScreen({
+  discarded,
   freeGoal,
   freeStart,
   helpOpen,
@@ -1113,12 +1537,17 @@ function MenuScreen({
   menuRef,
   navigate,
   notice,
+  onCopyProgress,
   onImport,
+  onReset,
   onStartFree,
+  progress,
   setFreeGoal,
   setFreeStart,
   setImportText,
+  storageFailed,
 }: {
+  discarded: string[];
   freeGoal: string;
   freeStart: string;
   helpOpen: boolean;
@@ -1126,12 +1555,22 @@ function MenuScreen({
   menuRef: React.RefObject<HTMLHeadingElement | null>;
   navigate: (destination: Destination) => void;
   notice: Notice;
+  onCopyProgress: () => void;
   onImport: () => void;
+  onReset: () => void;
   onStartFree: () => void;
+  progress: Progress;
   setFreeGoal: (value: string) => void;
   setFreeStart: (value: string) => void;
   setImportText: (value: string) => void;
+  storageFailed: boolean;
 }) {
+  const done = completedCount(progress);
+  const next = nextChallenge(progress);
+  const laws = earnedRules(progress);
+  const percent = Math.round((done / CHALLENGES.length) * 100);
+  const activeChapter = COURSE_CHAPTERS.find((chapter) => chapter.id === next?.chapter);
+
   return (
     <>
       <header className="topbar is-menu">
@@ -1152,35 +1591,197 @@ function MenuScreen({
         </p>
       )}
 
+      {discarded.length > 0 && (
+        <p className="notice is-error" role="status">
+          {discarded.length === 1 ? 'One saved proof' : `${discarded.length} saved proofs`} on this
+          device no longer check out against the current laws, so they are no longer counted. You can
+          work {discarded.length === 1 ? 'it' : 'them'} again.
+        </p>
+      )}
+
+      <section className="course-spotlight" aria-labelledby="course-next-title">
+        <div className="course-spotlight-copy">
+          <p className="eyebrow">{next ? activeChapter?.label : 'Course complete'}</p>
+          <h2 id="course-next-title">{next?.title ?? 'Every challenge proved'}</h2>
+          <p>
+            {next?.objective ??
+              'You have built every proof in the course. Revisit a proof, beat one of the reference routes, or explore an equation of your own.'}
+          </p>
+          {next && (
+            <button
+              className="tool-button is-primary"
+              type="button"
+              onClick={() => navigate({ view: 'challenge', id: next.id })}
+            >
+              {done === 0 ? 'Start the course' : 'Continue the course'}
+            </button>
+          )}
+        </div>
+        <div className="course-progress" aria-label={`${done} of ${CHALLENGES.length} challenges proved`}>
+          <div className="course-progress-number">
+            <strong>{done}</strong>
+            <span>of {CHALLENGES.length}</span>
+          </div>
+          <div className="course-progress-track" aria-hidden="true">
+            <span style={{ width: `${percent}%` }} />
+          </div>
+          <p>{percent}% of the proof path complete</p>
+        </div>
+      </section>
+
       <section className="menu-card" aria-labelledby="challenges-heading">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Challenges</p>
-            <h2 id="challenges-heading">Worked problems, in order</h2>
+            <p className="eyebrow">Course path</p>
+            <h2 id="challenges-heading">Five chapters of group reasoning</h2>
           </div>
         </div>
-        <ul className="challenge-list">
-          {CHALLENGES.map((entry) => (
-            <li key={entry.id}>
-              <button
-                // The number is shown in the badge and read here, rather than
-                // being printed twice in the title beside it.
-                aria-label={`Challenge ${entry.label}: ${entry.title}. ${entry.blurb}`}
-                className="challenge-entry"
-                type="button"
-                onClick={() => navigate({ view: 'challenge', id: entry.id })}
+        <p className="menu-lead">
+          Each chapter moves from recognition to construction and then mixed practice. A locked
+          problem always takes you to the earliest prerequisite still waiting.
+        </p>
+        <div className="chapter-list">
+          {COURSE_CHAPTERS.map((chapter) => {
+            const entries = CHALLENGES.filter((entry) => entry.chapter === chapter.id);
+            const chapterDone = entries.filter((entry) =>
+              isChallengeComplete(progress, entry.id),
+            ).length;
+            const current = activeChapter?.id === chapter.id;
+
+            return (
+              <details
+                className="chapter-card"
+                open={current || chapterDone === entries.length ? true : undefined}
+                key={chapter.id}
               >
-                <span className="challenge-entry-number" aria-hidden="true">
-                  {entry.label}
-                </span>
-                <span className="challenge-entry-copy">
-                  <strong>{entry.title}</strong>
-                  <span>{entry.blurb}</span>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
+                <summary>
+                  <span className="chapter-index" aria-hidden="true">
+                    {chapterDone === entries.length ? '✓' : chapter.label.replace('Chapter ', '')}
+                  </span>
+                  <span className="chapter-copy">
+                    <strong>{chapter.title}</strong>
+                    <span>{chapter.description}</span>
+                  </span>
+                  <span className="chapter-count">{chapterDone}/{entries.length}</span>
+                </summary>
+                <p className="chapter-outcome">
+                  <strong>By the end:</strong> {chapter.outcome}
+                </p>
+                <ul className="challenge-list">
+                  {entries.map((entry) => {
+                    const finished = isChallengeComplete(progress, entry.id);
+                    const unlocked = isUnlocked(progress, entry.id);
+                    const record = bestFor(progress, entry.id);
+                    const rank = standing(progress, entry);
+                    const needs = entry.requires ? challengeById(entry.requires) : undefined;
+                    const required = requiredChallenge(progress, entry.id);
+                    const state = finished
+                      ? `Proved in ${steps(record!.steps)}.`
+                      : unlocked
+                        ? 'Not yet proved.'
+                        : `Locked until "${needs?.title ?? 'the one before it'}" is proved.`;
+
+                    return (
+                      <li key={entry.id}>
+                        <button
+                          aria-label={`Challenge ${entry.label}: ${entry.title}. ${state} ${entry.blurb}`}
+                          className={`challenge-entry ${finished ? 'is-done' : ''} ${
+                            unlocked ? '' : 'is-locked'
+                          }`}
+                          type="button"
+                          onClick={() =>
+                            navigate({
+                              view: 'challenge',
+                              id: unlocked ? entry.id : (required?.id ?? entry.id),
+                            })
+                          }
+                        >
+                          <span className="challenge-entry-number" aria-hidden="true">
+                            {finished ? '✓' : unlocked ? entry.label : '·'}
+                          </span>
+                          <span className="challenge-entry-copy">
+                            <strong>{entry.title}</strong>
+                            <span>{unlocked ? entry.objective : `Finish "${needs?.title}" first.`}</span>
+                            {finished && (
+                              <span className="challenge-entry-score" aria-hidden="true">
+                                {steps(record!.steps)}
+                                {rank === 'beaten'
+                                  ? ' — shorter than the proof we ship'
+                                  : rank === 'matched'
+                                    ? ' — matches the proof we ship'
+                                    : ` — ours takes ${benchmarkSteps(entry)}`}
+                              </span>
+                            )}
+                          </span>
+                        </button>
+                        {finished && (
+                          <button
+                            className="challenge-entry-review"
+                            type="button"
+                            onClick={() => navigate({ view: 'best', id: entry.id })}
+                          >
+                            Read your proof
+                            <span className="sr-only"> of {entry.title}</span>
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </details>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="menu-card" aria-labelledby="progress-heading">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">This device</p>
+            <h2 id="progress-heading">What you have earned</h2>
+          </div>
+        </div>
+        <p className="menu-lead">
+          Progress is kept in this browser and nowhere else — not on a server, and not on your
+          other devices. What is stored is the proofs themselves, so every one of them is checked
+          again each time the app opens.
+        </p>
+        {laws.length > 0 ? (
+          <ul className="earned-list">
+            {laws.map((law) => {
+              const from = grantedBy(law);
+              return (
+                <li className="earned-law" key={law}>
+                  <strong>{anyRuleById(law).name}</strong>
+                  <span>{from ? `proved in challenge ${from.label}` : 'earned'}</span>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="menu-lead">
+            No laws earned yet. The first is the identity inverting to itself, in challenge 03.
+          </p>
+        )}
+        {storageFailed && (
+          <p className="notice is-error" role="status">
+            This browser would not let the app save. Your proof still works, but it will not be here
+            when you come back — copy your progress if you need to keep it.
+          </p>
+        )}
+        <div className="share-actions">
+          <button
+            className="tool-button"
+            type="button"
+            onClick={onCopyProgress}
+            disabled={done === 0}
+          >
+            Copy progress
+          </button>
+          <button className="tool-button" type="button" onClick={onReset} disabled={done === 0}>
+            Clear progress
+          </button>
+        </div>
       </section>
 
       <section className="menu-card" aria-labelledby="free-heading">
@@ -1276,81 +1877,5 @@ function MenuScreen({
         {helpOpen && <HelpText />}
       </section>
     </>
-  );
-}
-
-/**
- * General orientation only: what the app is, what a step is, and how to write
- * an expression. How to do any particular challenge is the challenge's job.
- */
-function HelpText() {
-  return (
-    <div className="help">
-      <h3>What you are doing</h3>
-      <p>
-        You start from an expression or an equation and change it one step at a time. Every step
-        has to be justified by a law that holds in every group, and the app will not let you make
-        a move that is not. When a challenge sets a target, you are finished once your line
-        matches it.
-      </p>
-
-      <h3>Making a step</h3>
-      <ol>
-        <li>Choose a law. Every place it can be used is then marked.</li>
-        <li>Choose one of those places. A numbered bracket sits under the part it would rewrite.</li>
-        <li>The new line joins the proof, labelled with the law that produced it.</li>
-      </ol>
-      <p>
-        On an equation, some laws rewrite part of one side. Others act on the statement as a whole
-        — multiplying both sides, or swapping them — and are offered on the line itself rather than
-        under any part of it.
-      </p>
-
-      <h3>Writing an expression</h3>
-      <p>
-        Products are written by juxtaposition: <code>ab</code>, <code>a b</code> and <code>a*b</code>{' '}
-        all mean the same thing. A generator is one letter and any digits, so <code>r2</code> is a
-        single generator while <code>a^2</code> is a power. <code>e</code> is the identity. A
-        repeated power needs parentheses: <code>(a^2)^3</code>. One <code>=</code> makes the line an
-        equation.
-      </p>
-
-      <h3>Order matters</h3>
-      <p>
-        Nothing here assumes that <code>ab</code> and <code>ba</code> are the same. That is why
-        multiplying an equation on the left and on the right are different moves, and why{' '}
-        <code>(ab)^-1</code> is <code>b^-1 a^-1</code> rather than <code>a^-1 b^-1</code>.
-      </p>
-
-      <h3>Changing your mind</h3>
-      <p>
-        Undo and redo step back and forth through the proof; taking a different move after undoing
-        replaces what came after. Restart returns to the first line. Nothing is timed and nothing is
-        scored.
-      </p>
-    </div>
-  );
-}
-
-/** Live typeset feedback for a text field, or the reason it will not parse. */
-function FieldPreview({ source, allowEmpty = false }: { source: string; allowEmpty?: boolean }) {
-  const trimmed = source.trim();
-  if (allowEmpty && trimmed.length === 0) {
-    return <span className="field-preview is-muted">No goal — explore freely.</span>;
-  }
-
-  const result = tryParseSubject(trimmed);
-  if (!result.ok) {
-    return (
-      <span className="field-preview is-error" role="status">
-        {result.message}
-      </span>
-    );
-  }
-
-  return (
-    <span className="field-preview" role="status">
-      <StaticSubject subject={result.subject} />
-    </span>
   );
 }

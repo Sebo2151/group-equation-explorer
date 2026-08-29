@@ -49,6 +49,13 @@ test('every whole-equation rule in this phase is an equivalence', () => {
   }
 });
 
+test('every equivalence formula renders an equivalence command, not the letters iff', () => {
+  for (const id of EQUATION_RULE_IDS) {
+    assert.match(anyRuleById(id).formula, /\\iff/);
+    assert.doesNotMatch(anyRuleById(id).formula, /[^\\]iff/);
+  }
+});
+
 test('no rule formula or description leaks TeX into a spoken form', () => {
   for (const rule of ALL_RULES) {
     assert.doesNotMatch(rule.spokenFormula, /\\|[{}^]/);

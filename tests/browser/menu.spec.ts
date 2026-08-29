@@ -38,20 +38,26 @@ test('the app opens on the menu, not in a proof', async ({ page }) => {
   await expect(page.locator('.proof-card')).toHaveCount(0);
 });
 
-test('the menu lists every challenge and can start one', async ({ page }) => {
+test('the menu lists every challenge and can start the first', async ({ page }) => {
   await page.goto('/');
-  const entries = page.getByRole('button', { name: /^Challenge \d+:/ });
-  await expect(entries).toHaveCount(11);
+  const entries = page.locator('.challenge-entry');
+  await expect(entries).toHaveCount(19);
 
-  await openChallenge(page, '07');
-  await expect(heading(page, 'Solve for x')).toBeVisible();
+  await openChallenge(page, '01');
+  await expect(heading(page, 'Cancel what undoes itself')).toBeVisible();
   await expect(page.locator('.proof-card')).toHaveCount(1);
 });
 
-test('a challenge is reachable by its own link', async ({ page }) => {
+/**
+ * The menu enforces the order; a link does not. Somebody meant to send it, and
+ * every challenge staying linkable is what this shell was built to guarantee —
+ * so it opens, and says that the learner is ahead of the intended order.
+ */
+test('a locked challenge still opens by its own link, and says so', async ({ page }) => {
   await page.goto('/#challenge=socks-and-shoes');
   await expect(heading(page, 'Socks and shoes')).toBeVisible();
-  await expect(page.locator('.challenge-number')).toHaveText('04');
+  await expect(page.locator('.challenge-number')).toHaveText('07');
+  await expect(page.locator('.notice')).toContainText('jumped ahead');
 });
 
 test('a link naming no challenge lands on the menu rather than failing', async ({ page }) => {

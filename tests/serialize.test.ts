@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { challengeSetup, challengeById, freeSetup } from '../app/challenges.ts';
+import { exactGoal } from '../app/goal.ts';
 import { MAX_INPUT_LENGTH, parseTerm } from '../app/parse.ts';
 import { applyRule, createProof, isComplete, MAX_STEPS, visibleLines, type ProofState } from '../app/proof.ts';
 import {
@@ -83,7 +84,7 @@ test('canonical source longer than editor input survives records and links', () 
   assert.deepEqual(chain(proofFromHash(proofToHash(opening)!)!), chain(opening));
 
   const proof = applyRule(
-    createProof(freeSetup(expression(start), expression(parseTerm('b'.repeat(121))))),
+    createProof(freeSetup(expression(start), exactGoal(expression(parseTerm('b'.repeat(121)))))),
     'insert-inverse-pair',
     at({ path: [], start: 0, end: -1 }),
     { term: parseTerm('c'.repeat(121)) },

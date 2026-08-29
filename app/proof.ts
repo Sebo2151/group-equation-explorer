@@ -11,8 +11,9 @@ import {
   isAnyRuleId,
   type AnyRuleId,
 } from './catalogue.ts';
+import { goalReached, type Goal } from './goal.ts';
 import { validateArgument, type RuleArgument } from './rules.ts';
-import { subjectsEqual, type Address, type Subject } from './subject.ts';
+import { type Address, type Subject } from './subject.ts';
 
 export type ProofStep = {
   rule: AnyRuleId;
@@ -36,8 +37,8 @@ export type ProofState = {
   /** Which challenge this proof belongs to, or `free` for exploration. */
   challenge: string;
   start: Subject;
-  /** The subject to reach, or `null` when there is nothing to reach. */
-  goal: Subject | null;
+  /** What finishing looks like, or `null` when there is nothing to reach. */
+  goal: Goal | null;
   /**
    * The rules this proof was built with. Frozen for the life of the proof: a
    * score means nothing unless the tools that produced it are recorded too.
@@ -51,7 +52,7 @@ export type ProofState = {
 export type ProofSetup = {
   challenge: string;
   start: Subject;
-  goal: Subject | null;
+  goal: Goal | null;
   ruleset: AnyRuleId[];
 };
 
@@ -162,11 +163,12 @@ export function restart(state: ProofState): ProofState {
 /**
  * Compare subjects, not rendered TeX. Distinct terms can print the same way
  * once subscripts and parentheses are involved, and a goal check must tell them
- * apart. Equations compare orientation-sensitively, so reaching `v = u` when
- * the goal is `u = v` leaves symmetry still to be applied.
+ * apart. An exact goal compares orientation-sensitively, so reaching `v = u`
+ * when the goal is `u = v` leaves symmetry still to be applied; a goal shape
+ * asks something weaker on purpose, and says what in `goal.ts`.
  */
 export function isComplete(state: ProofState): boolean {
-  return state.goal !== null && subjectsEqual(currentLine(state).subject, state.goal);
+  return state.goal !== null && goalReached(currentLine(state).subject, state.goal);
 }
 
 /**

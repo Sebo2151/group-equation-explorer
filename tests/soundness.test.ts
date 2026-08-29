@@ -135,6 +135,9 @@ test('every term rule preserves the value of the expression it rewrites', () => 
     '(a^2)^-1',
     'a^-2 b',
     '(a b)^-1 a b',
+    'a b (a b)^-1',
+    '(a b c)^-1 a b c',
+    'b (a b)^-1 a b c',
   ];
 
   for (const group of TEST_GROUPS) {
@@ -158,7 +161,19 @@ test('every term rule preserves the value of the expression it rewrites', () => 
  * true equation into a false one here.
  */
 test('every whole-equation rule preserves the truth of the equation', () => {
-  const samples = ['a x = b', 'x a = b', 'a b = b a', 'x = a b', 'a x = a y', 'e = a'];
+  const samples = [
+    'a x = b',
+    'x a = b',
+    'a b = b a',
+    'x = a b',
+    'a x = a y',
+    'e = a',
+    // Cancellation: shared at one end, at both, and at neither.
+    'a x b = a y b',
+    'x a = y a',
+    'a = a b',
+    'a x = b y',
+  ];
   const multipliers = ['a', 'b', 'a^-1', 'b^-1', 'x'];
 
   for (const group of TEST_GROUPS) {

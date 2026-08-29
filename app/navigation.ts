@@ -17,6 +17,8 @@ export type Destination =
   | { view: 'help' }
   | { view: 'free' }
   | { view: 'challenge'; id: string }
+  /** A finished proof of your own, read back rather than worked. */
+  | { view: 'best'; id: string }
   /** A proof someone shared. The payload is left to `serialize.ts` to read. */
   | { view: 'shared'; fragment: string };
 
@@ -46,6 +48,12 @@ export function parseLocation(fragment: unknown): Destination {
     return CHALLENGE_ID.test(id) ? { view: 'challenge', id } : MENU;
   }
 
+  const best = /^best=(.*)$/.exec(text);
+  if (best) {
+    const id = best[1];
+    return CHALLENGE_ID.test(id) ? { view: 'best', id } : MENU;
+  }
+
   return MENU;
 }
 
@@ -59,6 +67,8 @@ export function locationHash(destination: Destination): string {
       return '#free';
     case 'challenge':
       return `#challenge=${destination.id}`;
+    case 'best':
+      return `#best=${destination.id}`;
     case 'shared':
       return destination.fragment;
   }
@@ -66,5 +76,16 @@ export function locationHash(destination: Destination): string {
 
 /** Whether this destination puts the learner on the proof sheet. */
 export function isProofDestination(destination: Destination): boolean {
-  return destination.view !== 'menu' && destination.view !== 'help';
+  return (
+    destination.view !== 'menu' && destination.view !== 'help' && destination.view !== 'best'
+  );
+}
+
+/**
+ * Whether this destination reads a proof back rather than building one. It is
+ * neither the menu nor the workbench: nothing on it can be acted on, so the
+ * laws, the controls and the brackets all stay away.
+ */
+export function isReadingDestination(destination: Destination): boolean {
+  return destination.view === 'best';
 }

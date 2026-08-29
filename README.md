@@ -12,6 +12,8 @@ Start here when reviewing the code with fresh context:
   known limitations, review priorities, and a suggested audit prompt.
 - [Audit record, 2026-08-27](docs/audit-2026-08-27.md) — the first audit pass:
   defects reproduced and fixed, security posture, and what remains untested.
+- [Phase 4 record](docs/phase-4-2026-08-28.md) — the curriculum, the unlock and
+  hint designs, why one rule had to widen, and what was left undone.
 
 ## Phase 2
 
@@ -45,6 +47,48 @@ What Phase 2 added on top of the Phase 1 slice:
 Associativity is still suppressed in the interface: products are flat, so
 students do not spend their time rearranging parentheses. Structure under an
 inverse or a power is kept, because that structure is mathematically meaningful.
+
+## Phase 4
+
+The challenges are now a course rather than a list. They unlock in order, each
+one opening when the one before it is proved, and what a learner earns along the
+way is *laws*: `(a^-1)^-1 = a`, socks-and-shoes, `e^-1 = e` and cancellation are
+each proved in a challenge of their own before any later challenge is allowed to
+use them in a single step. A test walks the whole list and fails if a derived
+law is ever offered before the challenge that establishes it, or if a challenge
+is handed the law it exists to prove.
+
+Making socks-and-shoes provable meant widening one rule. Deriving it from the
+axioms requires writing `(ab)^-1(ab)` and cancelling — but products are flat, so
+that line holds three factors and "cancel inverse pair" only matched two. It now
+matches a factor against the adjacent run it inverts, which removes a limitation
+of the storage format rather than granting a new law: associative rebracketing
+is free here and was never meant to cost a step.
+
+Solving for x is now a goal *shape* — x by itself on a named side, and gone from
+the other — so any route that solves the equation finishes it. Exact goals are
+unchanged, and still orientation sensitive.
+
+Hints come in three grades, from the family of laws to look in, through the law
+and where it applies, to the move itself offered as a control. They walk a
+reference proof that ships with each challenge and is machine-checked against
+exactly that challenge's tools. There is no proof search, so a learner who has
+gone a different way is told exactly that — their line is not wrong, it is
+simply not on the route the app knows — and offered the route, or a step back
+onto it.
+
+Progress is kept on the device as the proofs themselves. That is what makes it
+evidence: reading it back replays every record against the same rule contracts
+the interface uses, and drops anything that does not check out, including a real
+proof relabelled with a shorter step count. A completion can be claimed in
+storage, but it cannot be bought there.
+
+The nineteen challenges are grouped into five named chapters, each with a
+learning outcome. Four additional practice and transfer problems reinforce
+powers, mixed inverses, and solving equations with factors on both ends. Every
+challenge opens with a short thinking prompt and closes with a takeaway and a
+clear next step. The menu leads with the learner's next useful action, shows
+overall progress, and keeps the full course map available chapter by chapter.
 
 ## The shell
 
@@ -94,10 +138,9 @@ Every whole-equation law declares a `direction`, and a test asserts that every
 one of them in this phase is an equivalence. The field exists now so that the
 one-way inference of Phase 6 does not need a record migration to gain it.
 
-Cancellation is deliberately **not** a law. It is derivable from left
-multiplication and the local laws, so challenge 11 is where it gets proved; a
-later phase can grant it as a tool once it has been earned. That is the same
-pattern socks-and-shoes already follows.
+Cancellation is deliberately **not** a primitive law. It is derivable from left
+multiplication and the local laws, so a challenge is where it gets proved. Phase
+4 is what grants it as a tool afterwards.
 
 Goal matching is orientation sensitive: reaching `v = u` when the goal is
 `u = v` leaves symmetry still to be applied. Making the two equal would hand out
@@ -220,7 +263,15 @@ passes also remain open. See the audit record for the current gaps.
   whether its converse also holds
 - `app/catalogue.ts` — the two catalogues as one id space, and the dispatch that
   applies a term rule to one side of an equation
-- `app/challenges.ts` — challenge data, including each challenge's ruleset
+- `app/challenges.ts` — the curriculum: each challenge's ruleset, the law it
+  earns, what unlocks it, and the reference proof the hints walk
+- `app/goal.ts` — what a challenge asks you to reach: an exact line, or a
+  variable standing alone on a named side
+- `app/progress.ts` — what the device remembers, as proofs rather than flags,
+  and the unlocks and personal bests derived from them
+- `app/storage.ts` — the one place the app touches browser storage
+- `app/hints.ts` — graduated hints from the authored route, and the honest
+  answer when the learner has gone somewhere else
 - `app/navigation.ts` — where the app is, encoded in the URL fragment
 - `app/proof.ts` — proof history as a DOM-free reducer, plus the replay verifier
 - `app/serialize.ts` — proof record export/import, LaTeX export, share links

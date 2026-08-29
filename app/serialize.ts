@@ -9,6 +9,14 @@
 
 import { anyRuleById, isAnyRuleId, type AnyRuleId } from './catalogue.ts';
 import { challengeById, challengeSetup, type ChallengeSetup } from './challenges.ts';
+import {
+  exactGoal,
+  goalRecord,
+  goalsEqual,
+  isolatedGoal,
+  type Goal,
+  type GoalRecord,
+} from './goal.ts';
 import { parseSubject, parseTerm } from './parse.ts';
 import {
   createProof,
@@ -30,7 +38,7 @@ import {
 import { termSource, type Path } from './term.ts';
 
 export const PROOF_FORMAT = 'group-equation-explorer/proof';
-export const PROOF_VERSION = 2;
+export const PROOF_VERSION = 3;
 
 /** Bounds the parsing work an untrusted record can cause. */
 export const MAX_IMPORT_CHARACTERS = 20_000;
@@ -65,7 +73,12 @@ export type ProofRecord = {
   version: number;
   challenge: string;
   start: string;
-  goal: string | null;
+  /**
+   * Source text for an exact goal, as it always was, or an object for a goal
+   * shape. Two spellings rather than one so that a reader — and the validator —
+   * can never mistake "reach this line" for "get x by itself".
+   */
+  goal: GoalRecord | null;
   ruleset: AnyRuleId[];
   steps: StepRecord[];
 };
@@ -76,7 +89,7 @@ export function exportProof(state: ProofState): ProofRecord {
     version: PROOF_VERSION,
     challenge: state.challenge,
     start: subjectSource(state.start),
-    goal: state.goal === null ? null : subjectSource(state.goal),
+    goal: goalRecord(state.goal),
     ruleset: [...state.ruleset],
     steps: replayableSteps(state).map(({ rule, address, argument }) => ({
       rule,
@@ -122,7 +135,17 @@ export function importProof(text: unknown): ProofState {
     throw new TypeError('That is not valid JSON.');
   }
 
-  return replayRecord(validateRecord(parsed));
+  return importProofRecord(parsed);
+}
+
+/**
+ * The same validation and replay, starting from a value that has already been
+ * parsed out of JSON. Stored progress holds records rather than text, and it
+ * must be re-checked on the way in for exactly the reason an imported file is:
+ * a completion nobody verified is not evidence of anything.
+ */
+export function importProofRecord(value: unknown): ProofState {
+  return replayRecord(validateRecord(value));
 }
 
 function validateRecord(value: unknown): ProofRecord {
@@ -143,9 +166,7 @@ function validateRecord(value: unknown): ProofRecord {
   if (typeof record.start !== 'string') {
     throw new TypeError('Proof record is missing its starting expression.');
   }
-  if (record.goal !== null && typeof record.goal !== 'string') {
-    throw new TypeError('Proof record has an unreadable goal.');
-  }
+  const goal = validateGoalRecord(record.goal);
   if (!Array.isArray(record.ruleset) || !record.ruleset.every(isAnyRuleId)) {
     throw new TypeError('Proof record names a rule this version does not have.');
   }
@@ -159,10 +180,39 @@ function validateRecord(value: unknown): ProofRecord {
     version: PROOF_VERSION,
     challenge: record.challenge,
     start: record.start,
-    goal: record.goal as string | null,
+    goal,
     ruleset: record.ruleset as AnyRuleId[],
     steps: record.steps.map(validateStepRecord),
   };
+}
+
+/**
+ * A goal arriving as untrusted data. A shape is checked field by field here;
+ * the exact form is left as text and parsed with everything else, under the
+ * same grammar and size limits.
+ */
+function validateGoalRecord(value: unknown): GoalRecord | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string') return value;
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError('Proof record has an unreadable goal.');
+  }
+
+  const shape = value as Record<string, unknown>;
+  if (typeof shape.isolate !== 'string') {
+    throw new TypeError('Proof record has an unreadable goal.');
+  }
+  if (shape.side !== 'left' && shape.side !== 'right') {
+    throw new TypeError('Proof record names a goal side that is neither left nor right.');
+  }
+  return { isolate: shape.isolate, side: shape.side };
+}
+
+function readGoal(record: GoalRecord | null): Goal | null {
+  if (record === null) return null;
+  return typeof record === 'string'
+    ? exactGoal(parseSubject(record, 'goal', MAX_IMPORT_CHARACTERS))
+    : isolatedGoal(record.isolate, record.side);
 }
 
 function validateStepRecord(value: unknown, index: number): StepRecord {
@@ -220,8 +270,7 @@ function replayRecord(record: ProofRecord): ProofState {
   // The entire record has already passed its size limit; the parser still
   // enforces the same grammar, exponent, depth, and node bounds.
   const start = parseSubject(record.start, 'starting expression', MAX_IMPORT_CHARACTERS);
-  const goal =
-    record.goal === null ? null : parseSubject(record.goal, 'goal', MAX_IMPORT_CHARACTERS);
+  const goal = readGoal(record.goal);
   const setup = challengeSetupFor(record, start, goal);
 
   return replayProof(
@@ -258,7 +307,7 @@ function stepAddress(step: StepRecord): Address {
 function challengeSetupFor(
   record: ProofRecord,
   start: Subject,
-  goal: Subject | null,
+  goal: Goal | null,
 ): ChallengeSetup {
   const challenge = challengeById(record.challenge);
   if (!challenge) return { challenge: record.challenge, start, goal, ruleset: record.ruleset };
@@ -268,10 +317,7 @@ function challengeSetupFor(
   if (!subjectsEqual(start, declared.start)) {
     throw new RangeError(`Proof claims challenge ${challenge.id} but starts somewhere else.`);
   }
-  if (
-    (goal === null) !== (declared.goal === null) ||
-    (goal && declared.goal && !subjectsEqual(goal, declared.goal))
-  ) {
+  if (!goalsEqual(goal, declared.goal)) {
     throw new RangeError(`Proof claims challenge ${challenge.id} but aims somewhere else.`);
   }
   const extra = record.ruleset.filter((rule) => !challenge.rules.includes(rule));

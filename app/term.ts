@@ -141,6 +141,40 @@ export function isInversePair(left: Term, right: Term): boolean {
   return false;
 }
 
+/**
+ * Whether a run of adjacent factors multiplies out to the identity because one
+ * end of it inverts the rest.
+ *
+ * `isInversePair` sees only two factors, which is enough while both sides of a
+ * cancellation are single factors. It is not enough once a product is inverted:
+ * `(ab)^{-1}(ab)` is stored flat, as the three factors `(ab)^{-1}`, `a`, `b`,
+ * so the pair the learner wrote is no longer two adjacent things. Refusing that
+ * would make the flat representation into a mathematical restriction — and the
+ * whole point of flattening is that associative rebracketing is free and never
+ * costs a step. So a run cancels when the factor at either end is the inverse
+ * of exactly the run beside it.
+ *
+ * Only an explicit `inverse` node opens out this way. A power is left to the
+ * power laws, which is where negating an exponent already costs its own step.
+ */
+export function cancelsToIdentity(span: Term[]): boolean {
+  if (span.length < 2) return false;
+  if (span.length === 2 && isInversePair(span[0], span[1])) return true;
+
+  const first = span[0];
+  if (first.kind === 'inverse' && sameFactors(hostFactors(first.term), span.slice(1))) return true;
+
+  const last = span[span.length - 1];
+  return last.kind === 'inverse' && sameFactors(hostFactors(last.term), span.slice(0, -1));
+}
+
+function sameFactors(left: Term[], right: Term[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((factor, index) => termsEqual(factor, right[index]))
+  );
+}
+
 export function children(term: Term): Term[] {
   switch (term.kind) {
     case 'product':
