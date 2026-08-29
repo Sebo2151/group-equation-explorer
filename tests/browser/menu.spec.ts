@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { beginProof } from './briefing.ts';
 
 /**
  * The shell: where the app opens, how you get between the menu and a proof, and
@@ -26,7 +27,9 @@ async function applyTarget(page: Page, index = 0) {
 async function openChallenge(page: Page, label: string) {
   await expect(async () => {
     await page.getByRole('button', { name: new RegExp(`^Challenge ${label}:`) }).click();
-    await expect(page.locator('.challenge-number')).toHaveText(label, { timeout: 1000 });
+    await expect(page.locator('.briefing-number, .challenge-number')).toContainText(label, {
+      timeout: 1000,
+    });
   }).toPass({ timeout: 15_000 });
 }
 
@@ -44,7 +47,9 @@ test('the menu lists every challenge and can start the first', async ({ page }) 
   await expect(entries).toHaveCount(19);
 
   await openChallenge(page, '01');
-  await expect(heading(page, 'Cancel what undoes itself')).toBeVisible();
+  await expect(page.locator('#briefing-title')).toHaveText('Cancel what undoes itself');
+  await expect(page.locator('.proof-card')).toHaveCount(0);
+  await beginProof(page);
   await expect(page.locator('.proof-card')).toHaveCount(1);
 });
 
@@ -55,8 +60,8 @@ test('the menu lists every challenge and can start the first', async ({ page }) 
  */
 test('a locked challenge still opens by its own link, and says so', async ({ page }) => {
   await page.goto('/#challenge=socks-and-shoes');
-  await expect(heading(page, 'Socks and shoes')).toBeVisible();
-  await expect(page.locator('.challenge-number')).toHaveText('07');
+  await expect(page.locator('#briefing-title')).toHaveText('Socks and shoes');
+  await expect(page.locator('.briefing-number')).toHaveText('Challenge 07');
   await expect(page.locator('.notice')).toContainText('jumped ahead');
 });
 
@@ -73,6 +78,7 @@ test('a link naming no challenge lands on the menu rather than failing', async (
  */
 test('a proof in progress survives a trip to the menu and back', async ({ page }) => {
   await page.goto('/#challenge=cancel-pairs');
+  await beginProof(page);
   await applyTarget(page);
   await applyTarget(page);
   const line = await page
@@ -94,6 +100,7 @@ test('a proof in progress survives a trip to the menu and back', async ({ page }
 test('the back button returns to the menu without restarting the proof', async ({ page }) => {
   await page.goto('/');
   await openChallenge(page, '01');
+  await beginProof(page);
   await applyTarget(page);
 
   await page.goBack();
@@ -143,6 +150,7 @@ test('help can be opened and closed from the menu', async ({ page }) => {
 
 test('the proof screen carries no challenge picker or setup forms', async ({ page }) => {
   await page.goto('/#challenge=cancel-pairs');
+  await beginProof(page);
 
   await expect(page.getByRole('combobox')).toHaveCount(0);
   await expect(page.getByLabel('Start from')).toHaveCount(0);
@@ -151,6 +159,7 @@ test('the proof screen carries no challenge picker or setup forms', async ({ pag
 
 test('exporting stays with the proof it describes', async ({ page }) => {
   await page.goto('/#challenge=cancel-pairs');
+  await beginProof(page);
   await expect(async () => {
     await page.getByRole('button', { name: 'Share' }).click();
     await expect(page.getByRole('button', { name: 'Copy proof record' })).toBeVisible({

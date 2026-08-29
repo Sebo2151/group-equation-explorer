@@ -10,6 +10,7 @@ import {
   isAnyRuleId,
 } from '../app/catalogue.ts';
 import { EQUATION_RULE_IDS } from '../app/equation-rules.ts';
+import { LAW_PURPOSES, purposeFor } from '../app/law-purposes.ts';
 import { parseTerm } from '../app/parse.ts';
 import { RULE_IDS } from '../app/rules.ts';
 import { equation, expression, subjectSource, subjectsEqual } from '../app/subject.ts';
@@ -47,6 +48,13 @@ test('every whole-equation rule in this phase is an equivalence', () => {
     assert.equal(definition.scope, 'equation');
     assert.equal(definition.scope === 'equation' && definition.direction, 'iff');
   }
+});
+
+test('every law appears in exactly one learner-facing purpose group', () => {
+  const grouped = LAW_PURPOSES.flatMap((purpose) => purpose.rules);
+  assert.deepEqual(new Set(grouped), new Set(ALL_RULE_IDS));
+  assert.equal(grouped.length, ALL_RULE_IDS.length);
+  for (const id of ALL_RULE_IDS) assert.equal(purposeFor(id).rules.includes(id), true);
 });
 
 test('every equivalence formula renders an equivalence command, not the letters iff', () => {

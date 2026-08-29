@@ -11,6 +11,10 @@ export function HelpText() {
       </p>
 
       <h3>Making a step</h3>
+      <p>
+        Each challenge starts with a short briefing: read the target, make a prediction, and then
+        choose <strong>Begin proof</strong>. You can reopen the briefing from the proof controls.
+      </p>
       <ol>
         <li>Choose a law. Every place it can be used is then marked.</li>
         <li>Choose one of those places. A numbered bracket sits under the part it would rewrite.</li>

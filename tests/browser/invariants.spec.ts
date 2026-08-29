@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { beginProof, revealLaw } from './briefing.ts';
 
 /**
  * Invariants, not appearance. Every assertion here should still make sense if
@@ -16,7 +17,7 @@ const targets = (page: Page) => page.getByRole('button', { name: /at .*\. Option
  * it distinct from the candidate controls, whose names also begin with the law.
  */
 const lawButton = (page: Page, law: string) =>
-  page.getByRole('complementary').getByRole('button', { name: new RegExp(`^${law}, \\d+ place`) });
+  page.locator(`.rules-card .rule-card[aria-label^="${law},"]`);
 
 /**
  * The markup is server-rendered, so a click can land before React has attached
@@ -25,6 +26,7 @@ const lawButton = (page: Page, law: string) =>
  */
 async function selectLaw(page: Page, law: string) {
   const button = lawButton(page, law);
+  await revealLaw(button);
   await expect(async () => {
     await button.click();
     await expect(button).toHaveAttribute('aria-pressed', 'true', { timeout: 1000 });
@@ -90,6 +92,7 @@ async function solve(page: Page) {
 // directly rather than relying on what the app happens to load first.
 test.beforeEach(async ({ page }) => {
   await page.goto('/#challenge=cancel-pairs');
+  await beginProof(page);
   await expect(page.getByRole('heading', { name: 'Build an equality chain' })).toBeVisible();
 });
 

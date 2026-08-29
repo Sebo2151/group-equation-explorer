@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { PROOF_FORMAT, PROOF_VERSION } from '../../app/serialize.ts';
+import { beginProof, revealLaw } from './briefing.ts';
 
 /**
  * Phase 2 behaviour: parsed input, nested and gap targets, powers, per-challenge
@@ -11,11 +12,12 @@ import { PROOF_FORMAT, PROOF_VERSION } from '../../app/serialize.ts';
 const targets = (page: Page) => page.getByRole('button', { name: /\. Option \d+ of \d+\.$/ });
 
 const lawButton = (page: Page, law: string) =>
-  page.getByRole('complementary').getByRole('button', { name: new RegExp(`^${law}, \\d+ place`) });
+  page.locator(`.rules-card .rule-card[aria-label^="${law},"]`);
 
 /** Server-rendered markup means a click can land before hydration; retry. */
 async function selectLaw(page: Page, law: string) {
   const button = lawButton(page, law);
+  await revealLaw(button);
   await expect(async () => {
     await button.click();
     await expect(button).toHaveAttribute('aria-pressed', 'true', { timeout: 1000 });
@@ -90,6 +92,7 @@ async function openMenu(page: Page) {
  */
 async function chooseChallenge(page: Page, value: string) {
   await goTo(page, value === 'free' ? '#free' : `#challenge=${value}`);
+  await beginProof(page);
   await expect(page.locator('.challenge-number')).toHaveText(CHALLENGE_LABEL[value], {
     timeout: 15_000,
   });
@@ -181,6 +184,7 @@ const SOCKS_RECORD = {
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/#challenge=cancel-pairs');
+  await beginProof(page);
   await expect(page.getByRole('heading', { name: 'Build an equality chain' })).toBeVisible();
   await ready(page);
 });
@@ -189,12 +193,11 @@ test.beforeEach(async ({ page }) => {
 
 test('a challenge offers only the laws it permits', async ({ page }) => {
   await chooseChallenge(page, 'cancel-pairs');
-  const first = await page.getByRole('complementary').getByRole('button').count();
+  const first = await page.locator('.rules-card .rule-card').count();
 
   await chooseChallenge(page, 'powers');
   const laws = await page
-    .getByRole('complementary')
-    .getByRole('button')
+    .locator('.rules-card .rule-card')
     .evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')));
 
   expect(laws.length).toBeGreaterThan(first);

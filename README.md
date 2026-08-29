@@ -86,9 +86,12 @@ storage, but it cannot be bought there.
 The nineteen challenges are grouped into five named chapters, each with a
 learning outcome. Four additional practice and transfer problems reinforce
 powers, mixed inverses, and solving equations with factors on both ends. Every
-challenge opens with a short thinking prompt and closes with a takeaway and a
-clear next step. The menu leads with the learner's next useful action, shows
-overall progress, and keeps the full course map available chapter by chapter.
+challenge opens with a focused briefing and closes with a takeaway and a clear
+next step. The briefing presents the starting point, target, and prediction
+prompt before the proof controls appear. Once work begins, the goal stays
+compact and the laws are grouped by what they accomplish. The menu leads with
+the learner's next useful action, shows overall progress, and keeps the full
+course map available chapter by chapter.
 
 ## The shell
 

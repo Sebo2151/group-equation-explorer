@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { PROOF_FORMAT, PROOF_VERSION } from '../../app/serialize.ts';
+import { beginProof, revealLaw } from './briefing.ts';
 
 /**
  * Phase 3a: a proof line can be an equation.
@@ -49,10 +50,11 @@ const wholeLine = (page: Page) =>
   page.getByRole('button', { name: /\. Applies to the whole equation\.$/ });
 
 const lawButton = (page: Page, law: string) =>
-  page.getByRole('complementary').getByRole('button', { name: new RegExp(`^${law},`) });
+  page.locator(`.rules-card .rule-card[aria-label^="${law},"]`);
 
 async function selectLaw(page: Page, law: string) {
   const button = lawButton(page, law);
+  await revealLaw(button);
   await expect(async () => {
     await button.click();
     await expect(button).toHaveAttribute('aria-pressed', 'true', { timeout: 1000 });
@@ -197,7 +199,7 @@ test('a whole-equation law on an expression says what it needs and offers nothin
   await startFree(page, 'a a^-1 b');
 
   const law = lawButton(page, 'Swap the sides');
-  await expect(law).toHaveAccessibleName('Swap the sides, needs an equation');
+  await expect(law).toHaveAttribute('aria-label', 'Swap the sides, needs an equation');
 
   await selectLaw(page, 'Swap the sides');
   await expect(wholeLine(page)).toHaveCount(0);
@@ -275,6 +277,7 @@ const CHALLENGE_LABEL: Record<string, string> = {
  */
 async function chooseChallenge(page: Page, value: string) {
   await goTo(page, value === 'free' ? '#free' : `#challenge=${value}`);
+  await beginProof(page);
   await expect(page.locator('.challenge-number')).toHaveText(CHALLENGE_LABEL[value], {
     timeout: 15_000,
   });

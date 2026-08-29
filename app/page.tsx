@@ -1,8 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChallengeBriefing } from './challenge-briefing.tsx';
 import { FieldPreview, mathHtml, Typeset } from './math-view.tsx';
 import { HelpText } from './help-text.tsx';
+import { LAW_PURPOSES } from './law-purposes.ts';
 import {
   benchmarkSteps,
   CHALLENGES,
@@ -439,13 +441,6 @@ function RecordedProof({ state }: { state: ProofState | null }) {
 /* The page                                                            */
 /* ------------------------------------------------------------------ */
 
-const FAMILY_LABEL: Record<string, string> = {
-  identity: 'Identity',
-  inverse: 'Inverses',
-  power: 'Powers',
-  equation: 'Whole equation',
-};
-
 /**
  * How a law advertises where it can be used.
  *
@@ -486,7 +481,7 @@ function steps(count: number): string {
  */
 function scoreLine(challenge: Challenge, taken: number, best: number | undefined): string {
   const benchmark = benchmarkSteps(challenge);
-  const mine = `${steps(taken)}; the proof this app ships with takes ${steps(benchmark)}`;
+  const mine = `${steps(taken)}; the expected proof takes ${steps(benchmark)}`;
   const shorter = taken < benchmark ? ', so yours is shorter' : '';
   const previous =
     best !== undefined && best < taken ? `. Your best here is ${steps(best)}` : '';
@@ -516,6 +511,7 @@ export default function Home() {
   /** How many times a hint has been asked for on this line. Zero is none. */
   const [hintLevel, setHintLevel] = useState(0);
   const [routeOpen, setRouteOpen] = useState(false);
+  const [briefingOpen, setBriefingOpen] = useState(true);
 
   /**
    * The app opens on the menu, so that is what the server renders. There is no
@@ -536,6 +532,7 @@ export default function Home() {
   const moved = useRef(false);
   const lastFreeProof = useRef<ProofState | null>(null);
   const menuRef = useRef<HTMLHeadingElement | null>(null);
+  const briefingRef = useRef<HTMLHeadingElement | null>(null);
   // Read by the fragment handler, which must not be torn down and rebuilt on
   // every step just to see the current proof.
   const proofRef = useRef<ProofState | null>(null);
@@ -563,6 +560,9 @@ export default function Home() {
     : -1;
   const nextCourseChallenge =
     challengePosition >= 0 ? CHALLENGES[challengePosition + 1] : undefined;
+  const challengeChapter = challenge
+    ? COURSE_CHAPTERS.find((entry) => entry.id === challenge.chapter)
+    : undefined;
 
   /**
    * Read what this device remembers, once, after mount.
@@ -747,6 +747,7 @@ export default function Home() {
       const current = proofRef.current;
 
       if (target.view === 'shared') {
+        setBriefingOpen(false);
         try {
           const shared = proofFromHash(target.fragment);
           if (shared) open(shared, { tone: 'ok', text: 'Opened the proof from this link.' });
@@ -766,6 +767,7 @@ export default function Home() {
       }
 
       if (target.view === 'free') {
+        setBriefingOpen(false);
         // Already here: switching views must never restart the proof.
         if (current?.challenge === FREE_CHALLENGE_ID) return;
         open(
@@ -784,6 +786,7 @@ export default function Home() {
         if (current?.challenge === target.id) return;
         const found = challengeById(target.id);
         if (!found) return;
+        setBriefingOpen(true);
 
         /*
          * A link opens whatever it names, even something the menu still has
@@ -858,6 +861,14 @@ export default function Home() {
     }
     previousView.current = view;
   }, [view]);
+
+  const previousBriefing = useRef(false);
+  useEffect(() => {
+    if (view !== 'proof' || !challenge) return;
+    if (briefingOpen) briefingRef.current?.focus({ preventScroll: true });
+    else if (previousBriefing.current) currentRef.current?.focus({ preventScroll: true });
+    previousBriefing.current = briefingOpen;
+  }, [briefingOpen, challenge, view]);
 
   const apply = useCallback(
     ({ address }: ApplyRequest) => {
@@ -951,6 +962,7 @@ export default function Home() {
       tone: 'ok',
       text: 'Free exploration ready.',
     });
+    setBriefingOpen(false);
     showProof({ view: 'free' });
   };
 
@@ -997,6 +1009,7 @@ export default function Home() {
       return;
     }
     open(imported, { tone: 'ok', text: 'Proof imported and replayed.' });
+    setBriefingOpen(false);
     setImportText('');
     showProof(
       imported.challenge === FREE_CHALLENGE_ID
@@ -1006,7 +1019,12 @@ export default function Home() {
   };
 
   const permitted = ALL_RULES.filter((entry) => ruleAllowed(proof, entry.id));
-  const families = [...new Set(permitted.map((entry) => entry.family))];
+  const purposeGroups = LAW_PURPOSES.map((purpose) => ({
+    ...purpose,
+    entries: purpose.rules
+      .map((id) => permitted.find((entry) => entry.id === id))
+      .filter((entry): entry is AnyRuleDefinition => entry !== undefined),
+  })).filter((purpose) => purpose.entries.length > 0);
 
   return (
     <main className={`app-shell is-${view}`}>
@@ -1053,6 +1071,7 @@ export default function Home() {
             <h1>{challenge?.title ?? 'Your own expression'}</h1>
           </div>
         </div>
+        {(!briefingOpen || !challenge) && (
         <div className="top-actions" aria-label="Proof controls">
           <button
             className="tool-button"
@@ -1094,9 +1113,32 @@ export default function Home() {
           >
             Share
           </button>
+          {challenge && !complete && (
+            <button className="tool-button" type="button" onClick={() => setBriefingOpen(true)}>
+              Briefing
+            </button>
+          )}
         </div>
+        )}
       </header>
 
+      {notice && (
+        <p className={`notice is-${notice.tone}`} role="status">
+          {notice.text}
+        </p>
+      )}
+
+      {briefingOpen && challenge ? (
+        <ChallengeBriefing
+          challenge={challenge}
+          chapter={challengeChapter}
+          goal={proof.goal}
+          headingRef={briefingRef}
+          onBegin={() => setBriefingOpen(false)}
+          start={proof.start}
+        />
+      ) : (
+      <>
       <section className="challenge-banner" aria-labelledby="challenge-title">
         <div className="challenge-number">{challenge?.label ?? '··'}</div>
         <div className="challenge-copy">
@@ -1109,12 +1151,6 @@ export default function Home() {
               goalProse(proof.goal ?? null)
             )}
           </h2>
-          <p>{challenge?.blurb ?? 'Every law is available.'}</p>
-          {challenge && !complete && (
-            <p className="thinking-prompt">
-              <strong>Think first:</strong> {challenge.prompt}
-            </p>
-          )}
         </div>
         <div className={`status-pill ${complete ? 'is-complete' : ''}`} role="status">
           <span className="status-dot" />
@@ -1139,12 +1175,6 @@ export default function Home() {
             The record and the link contain every step, so anyone opening them sees the same proof.
           </p>
         </section>
-      )}
-
-      {notice && (
-        <p className={`notice is-${notice.tone}`} role="status">
-          {notice.text}
-        </p>
       )}
 
       {hint && challenge && (
@@ -1324,6 +1354,16 @@ export default function Home() {
                             Next challenge
                           </button>
                         )}
+                        <button
+                          className="tool-button"
+                          type="button"
+                          onClick={() => {
+                            setBriefingOpen(false);
+                            open(restart(proof));
+                          }}
+                        >
+                          Try a different proof
+                        </button>
                         <button className="tool-button" type="button" onClick={() => navigate(MENU)}>
                           Course overview
                         </button>
@@ -1396,13 +1436,21 @@ export default function Home() {
             </div>
           )}
 
-          {families.map((family) => (
-            <div className="rule-family" key={family}>
-              <p className="family-label">{FAMILY_LABEL[family] ?? family}</p>
+          {purposeGroups.map((purpose) => (
+            <details
+              className="rule-family purpose-group"
+              key={purpose.id}
+              open={purpose.rules.includes(selectedRule) ? true : undefined}
+            >
+              <summary>
+                <span>
+                  <strong>{purpose.label}</strong>
+                  <span>{purpose.description}</span>
+                </span>
+                <span className="purpose-count">{purpose.entries.length}</span>
+              </summary>
               <div className="rule-list">
-                {permitted
-                  .filter((entry) => entry.family === family)
-                  .map((entry) => {
+                {purpose.entries.map((entry) => {
                     const count = complete ? 0 : findAddresses(line.subject, entry.id).length;
                     const active = selectedRule === entry.id;
                     // Where a derived law came from, so it never reads as
@@ -1440,11 +1488,13 @@ export default function Home() {
                     );
                   })}
               </div>
-            </div>
+            </details>
           ))}
 
         </aside>
       </div>
+      </>
+      )}
       </>
       )}
     </main>
@@ -1706,10 +1756,10 @@ function MenuScreen({
                               <span className="challenge-entry-score" aria-hidden="true">
                                 {steps(record!.steps)}
                                 {rank === 'beaten'
-                                  ? ' — shorter than the proof we ship'
+                                  ? ' — shorter than expected'
                                   : rank === 'matched'
-                                    ? ' — matches the proof we ship'
-                                    : ` — ours takes ${benchmarkSteps(entry)}`}
+                                    ? ' — matches the expected length'
+                                    : ` — expected ${benchmarkSteps(entry)}`}
                               </span>
                             )}
                           </span>

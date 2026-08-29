@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { beginProof, revealLaw } from './briefing.ts';
 
 /**
  * Phase 4: the curriculum, and the things that make it a curriculum.
@@ -21,7 +22,7 @@ const STORAGE_KEY = 'group-equation-explorer/progress/v1';
 
 const heading = (page: Page, name: string) => page.getByRole('heading', { name });
 const targets = (page: Page) => page.getByRole('button', { name: /\. Option \d+ of \d+\.$/ });
-const laws = (page: Page) => page.getByRole('complementary').getByRole('button');
+const laws = (page: Page) => page.locator('.rules-card .rule-card');
 
 async function stepCount(page: Page) {
   const text = await page.locator('.status-pill').innerText();
@@ -37,8 +38,11 @@ async function applyTarget(page: Page, index = 0) {
 }
 
 async function selectLaw(page: Page, name: string) {
+  await beginProof(page);
+  const button = page.locator(`.rules-card .rule-card[aria-label^="${name},"]`);
+  await revealLaw(button);
   await expect(async () => {
-    await page.getByRole('button', { name: new RegExp(`^${name},`) }).click();
+    await button.click();
     await expect(page.locator('.selection-note strong')).toHaveText(name, { timeout: 1000 });
   }).toPass({ timeout: 15_000 });
 }
@@ -64,6 +68,7 @@ async function proveFirstChallenge(page: Page) {
  */
 async function proveByHints(page: Page, id: string) {
   await page.goto(`/#challenge=${id}`);
+  await beginProof(page);
   await expect(page.locator('.challenge-number')).not.toHaveText('··');
 
   for (let guard = 0; guard < 12; guard += 1) {
@@ -105,7 +110,7 @@ test('a locked entry sends the learner to the earliest unfinished prerequisite',
   // hits the server render and does nothing.
   await expect(async () => {
     await page.getByRole('button', { name: /^Challenge 19:/ }).click();
-    await expect(page.locator('.challenge-number')).toHaveText('01', { timeout: 1000 });
+    await expect(page.locator('.briefing-number')).toHaveText('Challenge 01', { timeout: 1000 });
   }).toPass({ timeout: 15_000 });
 });
 
@@ -119,19 +124,46 @@ test('proving a challenge opens the next one and records the length', async ({ p
   await expect(page.locator('.challenge-entry.is-locked')).toHaveCount(17);
 });
 
-test('a challenge frames the work with a thinking prompt', async ({ page }) => {
+test('a challenge briefing frames the work before revealing the workbench', async ({ page }) => {
   await page.goto('/#challenge=mixed-inverses');
 
-  await expect(page.locator('.thinking-prompt')).toContainText('Think first:');
-  await expect(page.locator('.thinking-prompt')).toContainText('Which outer operation should be resolved');
+  await expect(page.locator('.briefing-prompt')).toContainText('Think before you begin');
+  await expect(page.locator('.briefing-prompt')).toContainText('Which outer operation should be resolved');
+  await expect(page.locator('.proof-card')).toHaveCount(0);
+
+  await beginProof(page);
+  await expect(page.locator('#challenge-title')).toContainText('Reach');
+  await expect(page.locator('.challenge-banner')).not.toContainText('Which outer operation');
+});
+
+test('the law palette groups available moves by what they accomplish', async ({ page }) => {
+  await page.goto('/#challenge=solve-both-ends');
+  await beginProof(page);
+
+  const palette = page.getByRole('complementary');
+  await expect(palette.getByText('Simplify what is there', { exact: true })).toBeVisible();
+  await expect(palette.getByText('Transform the equation', { exact: true })).toBeVisible();
+  await expect(palette.locator('.purpose-group[open]')).toHaveCount(1);
 });
 
 test('completion names the takeaway and offers the next challenge', async ({ page }) => {
   await proveFirstChallenge(page);
 
   await expect(page.locator('.success-takeaway')).toContainText('Takeaway');
+  await expect(page.locator('.success-score')).toContainText('the expected proof takes');
+  await expect(page.getByRole('button', { name: 'Try a different proof' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Course overview' })).toBeVisible();
   await page.getByRole('button', { name: 'Next challenge' }).click();
-  await expect(page.locator('.challenge-number')).toHaveText('02');
+  await expect(page.locator('.briefing-number')).toHaveText('Challenge 02');
+});
+
+test('trying a different proof restarts without hiding the workbench', async ({ page }) => {
+  await proveFirstChallenge(page);
+  await page.getByRole('button', { name: 'Try a different proof' }).click();
+
+  await expect(page.locator('.status-pill')).toContainText('0 steps');
+  await expect(page.locator('.proof-lines .proof-line')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Begin proof' })).toHaveCount(0);
 });
 
 test('progress survives a reload, because it is stored on the device', async ({ page }) => {
@@ -148,12 +180,14 @@ test('progress survives a reload, because it is stored on the device', async ({ 
  */
 test('a lemma is not available in the challenge that proves it', async ({ page }) => {
   await page.goto('/#challenge=prove-double-inverse');
+  await beginProof(page);
   const offered = await laws(page).evaluateAll((els) =>
     els.map((el) => el.getAttribute('aria-label') ?? ''),
   );
   expect(offered.join(' | ')).not.toMatch(/^Undo a double inverse|\| Undo a double inverse/);
 
   await page.goto('/#challenge=double-inverse');
+  await beginProof(page);
   await expect(page.getByRole('button', { name: /^Undo a double inverse,/ })).toBeVisible();
 });
 
@@ -170,6 +204,7 @@ test('a law earned by proving it says which challenge proved it', async ({ page 
   }
 
   await page.goto('/#challenge=double-inverse');
+  await beginProof(page);
   await expect(
     page.getByRole('button', { name: /Undo a double inverse.*proved in challenge 04/ }),
   ).toBeVisible();
@@ -183,6 +218,7 @@ test('a law earned by proving it says which challenge proved it', async ({ page 
 
 test('hints escalate, and only the last grade offers the move', async ({ page }) => {
   await page.goto('/#challenge=cancel-pairs');
+  await beginProof(page);
   await page.getByRole('button', { name: 'Hint', exact: true }).click();
 
   const card = page.locator('.hint-card');
@@ -201,6 +237,7 @@ test('hints escalate, and only the last grade offers the move', async ({ page })
 
 test('the step a hint offers is an ordinary step that can be undone', async ({ page }) => {
   await page.goto('/#challenge=cancel-pairs');
+  await beginProof(page);
   await page.getByRole('button', { name: 'Hint', exact: true }).click();
   await page.getByRole('button', { name: 'Tell me more' }).click();
   await page.getByRole('button', { name: 'Tell me more' }).click();
@@ -325,9 +362,8 @@ test('progress can be cleared, and clearing relocks the course', async ({ page }
  */
 test('solving for x accepts any route that leaves x by itself', async ({ page }) => {
   await page.goto('/#challenge=solve-left');
-  await expect(page.locator('#challenge-title')).toContainText('x by itself on the left');
-
   await selectLaw(page, 'Multiply on the left');
+  await expect(page.locator('#challenge-title')).toContainText('x by itself on the left');
   await page.getByLabel('Multiply by this term').fill('a^-1');
   await expect(async () => {
     await page.getByRole('button', { name: /^Multiply on the left\./ }).click();
