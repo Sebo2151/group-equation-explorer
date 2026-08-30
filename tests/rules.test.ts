@@ -217,10 +217,10 @@ test('combine-inverses is the reverse direction, over any contiguous run', () =>
 
 /* Powers ----------------------------------------------------------------- */
 
-test('expand-power writes out positive and negative exponents', () => {
+test('expand-power writes out positive powers only', () => {
   assert.equal(step('a^3 b', 'expand-power', { path: [], start: 0, end: 0 }), 'a a a b');
-  assert.equal(step('a^-3 b', 'expand-power', { path: [], start: 0, end: 0 }), 'a^-1 a^-1 a^-1 b');
   assert.equal(step('(ab)^2', 'expand-power', { path: [], start: 0, end: 0 }), 'a b a b');
+  assert.deepEqual(at('a^-3 b', 'expand-power'), []);
   assert.deepEqual(at('a^0', 'expand-power'), []);
   assert.deepEqual(at('a b', 'expand-power'), []);
 });
@@ -229,6 +229,17 @@ test('expand-power is not offered when it would exceed the size budget', () => {
   // Seven factors expanded 64 times is 449 nodes, past the 400-node budget.
   assert.deepEqual(at('(a b c d f g h)^64', 'expand-power'), []);
   assert.equal(at('(a b c d f g)^64', 'expand-power').length, 1);
+});
+
+test('combine into a power collects identical repeated factors only', () => {
+  assert.equal(step('a a a b', 'combine-repeats', { path: [], start: 0, end: 2 }), 'a^3 b');
+  assert.equal(
+    step('(a b)^-1 (a b)^-1', 'combine-repeats', { path: [], start: 0, end: 1 }),
+    '((a b)^-1)^2',
+  );
+  assert.equal(step('a^-1 a^-1', 'combine-repeats', { path: [], start: 0, end: 1 }), '(a^-1)^2');
+  assert.deepEqual(at('a b a', 'combine-repeats'), []);
+  assert.deepEqual(at('e e', 'combine-repeats'), []);
 });
 
 test('combine-powers adds exponents of the same base only', () => {
@@ -325,7 +336,8 @@ test('details are plain words, never TeX', () => {
     ['a a^-1', 'cancel-inverse', { path: [], start: 0, end: 1 }],
     ['a e', 'remove-identity', { path: [], start: 1, end: 1 }],
     ['(ab)^-1', 'inverse-of-product', { path: [], start: 0, end: 0 }],
-    ['a^-3', 'expand-power', { path: [], start: 0, end: 0 }],
+    ['a^3', 'expand-power', { path: [], start: 0, end: 0 }],
+    ['a a a', 'combine-repeats', { path: [], start: 0, end: 2 }],
     ['a^3 a^-2', 'combine-powers', { path: [], start: 0, end: 1 }],
     ['(a^-1)^-1', 'double-inverse', { path: [], start: 0, end: 0 }],
   ];

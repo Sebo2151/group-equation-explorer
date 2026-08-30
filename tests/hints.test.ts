@@ -68,10 +68,10 @@ test('hints give away more at each grade, and only the last one acts', () => {
   assert.equal(third.kind === 'step' && third.more, false);
 });
 
-test('the first grade names a family without naming the law', () => {
+test('the first grade names a palette category without naming the law', () => {
   const hint = hintFor(createProof(challengeSetup(FIRST)), 1);
   assert.equal(hint.kind, 'step');
-  assert.match(hint.text, /inverse laws/);
+  assert.match(hint.text, /Simplification/);
   assert.ok(!hint.text.includes('Cancel inverse pair'), hint.text);
 });
 

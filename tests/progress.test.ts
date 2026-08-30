@@ -16,6 +16,7 @@ import {
   emptyProgress,
   isChallengeComplete,
   isUnlocked,
+  introducedRules,
   nextChallenge,
   progressFromJson,
   progressToJson,
@@ -133,6 +134,15 @@ test('a law is earned only by proving it', () => {
   const before = CHALLENGES.slice(0, CHALLENGES.indexOf(lemma)).map((entry) => entry.id);
   assert.equal(earnedRules(withSolved(...before)).includes(granted), false);
   assert.equal(earnedRules(withSolved(...before, lemma.id)).includes(granted), true);
+});
+
+test('a definition is listed only after its motivating challenge', () => {
+  const lesson = CHALLENGES.find((entry) => (entry.introduces ?? []).length > 0)!;
+  const introduced = lesson.introduces![0];
+
+  const before = CHALLENGES.slice(0, CHALLENGES.indexOf(lesson)).map((entry) => entry.id);
+  assert.equal(introducedRules(withSolved(...before)).includes(introduced), false);
+  assert.equal(introducedRules(withSolved(...before, lesson.id)).includes(introduced), true);
 });
 
 /* ------------------------------------------------------------------ */

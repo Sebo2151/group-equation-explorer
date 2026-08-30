@@ -6,10 +6,11 @@
  * fallthrough into some other rule's behaviour. `RULES` is derived from the
  * table, so an advertised rule cannot exist without an implementation.
  *
- * Every rule here is a theorem of group theory, valid in any group. That is
- * separate from whether a *challenge* may use it: a challenge whose point is to
- * establish socks-and-shoes must not list `inverse-of-product` among its tools.
- * That gating lives with the challenge and its recorded ruleset, not here.
+ * Every rule here is a sound equality in the notation used by the app. Some
+ * are group-theoretic theorems and some are the definitions that give power
+ * notation its meaning; the curriculum records that distinction. Whether a
+ * challenge may use either kind still lives with the challenge and its frozen
+ * ruleset, not here.
  */
 
 import {
@@ -50,6 +51,7 @@ export type RuleId =
   | 'combine-inverses'
   | 'inverse-of-identity'
   | 'expand-power'
+  | 'combine-repeats'
   | 'combine-powers'
   | 'zero-power'
   | 'inverse-of-power'
@@ -407,15 +409,15 @@ const RULE_TABLE: Record<RuleId, RuleImplementation> = {
     name: 'Write a power out',
     family: 'power',
     reason: 'Power notation',
-    formula: 'x^{n}=\\underbrace{x\\cdots x}_{n}',
-    spokenFormula: 'x to the power n equals x written n times',
-    description: 'Replace a power by the repeated product it abbreviates.',
+    formula: 'x^{n}=\\underbrace{x\\cdots x}_{n},\\quad n>0',
+    spokenFormula: 'for positive n, x to the power n equals x written n times',
+    description: 'Write a positive power as the repeated product it abbreviates.',
     attachesToGaps: false,
     needsTerm: false,
     targets(root) {
       return factorTargets(
         root,
-        (factor) => factor.kind === 'power' && Math.abs(factor.exponent) >= 2,
+        (factor) => factor.kind === 'power' && factor.exponent >= 2,
       ).filter((target) => withinBudget(rewriteExpandPower(root, target)));
     },
     rewrite(root, target) {
@@ -423,22 +425,48 @@ const RULE_TABLE: Record<RuleId, RuleImplementation> = {
       const { base, exponent } = factor as { base: Term; exponent: number };
       return {
         term: rewriteExpandPower(root, target),
-        detail:
-          exponent > 0
-            ? `${termSpeech(base)} to the power ${exponent} is ${exponent} copies of ${termSpeech(base)}`
-            : `${termSpeech(base)} to the power negative ${Math.abs(exponent)} is ${Math.abs(exponent)} copies of ${termSpeech(base)} inverse`,
+        detail: `${termSpeech(base)} to the power ${exponent} is ${exponent} copies of ${termSpeech(base)}`,
+      };
+    },
+  },
+
+  'combine-repeats': {
+    id: 'combine-repeats',
+    name: 'Combine into a power',
+    family: 'power',
+    reason: 'Power notation',
+    formula: '\\underbrace{x\\cdots x}_{n}=x^{n}',
+    spokenFormula: 'x written n times equals x to the power n',
+    description: 'Collect a repeated factor into positive-power notation.',
+    attachesToGaps: false,
+    needsTerm: false,
+    targets(root) {
+      return spanTargets(
+        root,
+        2,
+        (span) =>
+          span.length <= MAX_EXPONENT &&
+          span[0].kind !== 'identity' &&
+          span.every((factor) => termsEqual(factor, span[0])),
+      );
+    },
+    rewrite(root, target) {
+      const span = spanTerms(root, target);
+      return {
+        term: replacement(root, target, [power(span[0], span.length)]),
+        detail: `${span.length} copies of ${termSpeech(span[0])} are written as a power`,
       };
     },
   },
 
   'combine-powers': {
     id: 'combine-powers',
-    name: 'Combine powers',
+    name: 'Add exponents',
     family: 'power',
     reason: 'Power law',
     formula: 'x^{m}x^{n}=x^{m+n}',
     spokenFormula: 'x to the m times x to the n equals x to the m plus n',
-    description: 'Adjacent powers of the same term add their exponents.',
+    description: 'Multiply powers of the same term by adding their exponents.',
     attachesToGaps: false,
     needsTerm: false,
     targets(root) {
@@ -546,9 +574,7 @@ function rewriteWrapDouble(root: Term, target: Target): Term {
 function rewriteExpandPower(root: Term, target: Target): Term {
   const [factor] = spanTerms(root, target);
   const { base, exponent } = factor as { base: Term; exponent: number };
-  const copies =
-    exponent > 0 ? repeated(base, exponent) : repeated(inverse(base), Math.abs(exponent));
-  return replaceSpan(root, target, copies);
+  return replaceSpan(root, target, repeated(base, exponent));
 }
 
 function requireTerm(argument: RuleArgument | undefined, rule: string): Term {

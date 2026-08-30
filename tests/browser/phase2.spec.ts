@@ -199,8 +199,9 @@ test('a challenge offers only the laws it permits', async ({ page }) => {
     .locator('.rules-card .rule-card')
     .evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')));
 
-  expect(laws.length).toBeGreaterThan(first);
-  expect(laws.some((law) => law?.startsWith('Combine powers'))).toBe(true);
+  expect(laws.length).toBe(first);
+  expect(laws.some((law) => law?.startsWith('Write a power out'))).toBe(true);
+  expect(laws.some((law) => law?.startsWith('Combine into a power'))).toBe(true);
   // Socks and shoes is not among this challenge's tools, so it is not offered.
   expect(laws.some((law) => law?.startsWith('Distribute an inverse'))).toBe(false);
 });
@@ -305,18 +306,18 @@ test('insertion points at the same place but different depths are separate contr
 
 /* Powers ----------------------------------------------------------------- */
 
-test('powers combine, and can also be written out instead', async ({ page }) => {
+test('positive powers can be written out and collected again', async ({ page }) => {
   await chooseChallenge(page, 'powers');
 
-  await selectLaw(page, 'Combine powers');
-  await applyTarget(page);
-  expect(await currentLine(page)).toBe('a');
-  await expect(page.getByText('Expression simplified')).toBeVisible();
-
-  await page.getByRole('button', { name: 'Restart' }).click();
   await selectLaw(page, 'Write a power out');
   await applyTarget(page);
   expect(await currentLine(page)).toContain('a times a times a');
+
+  await applyTarget(page);
+  await selectLaw(page, 'Combine into a power');
+  await applyTarget(page, 3);
+  expect(await currentLine(page)).toBe('a to the power 5');
+  await expect(page.getByText('Expression simplified')).toBeVisible();
 });
 
 /* Free exploration ------------------------------------------------------- */

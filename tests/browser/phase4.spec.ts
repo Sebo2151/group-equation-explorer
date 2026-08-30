@@ -96,7 +96,7 @@ test.beforeEach(async ({ page }) => {
 test('only the first challenge is open on a fresh device', async ({ page }) => {
   await expect(page.getByRole('button', { name: /^Challenge 01:.*Not yet proved/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Challenge 02:.*Locked until/ })).toBeVisible();
-  await expect(page.locator('.challenge-entry.is-locked')).toHaveCount(20);
+  await expect(page.locator('.challenge-entry.is-locked')).toHaveCount(25);
 });
 
 /**
@@ -109,7 +109,7 @@ test('a locked entry sends the learner to the earliest unfinished prerequisite',
   // click on freshly reloaded markup: a click that lands before React attaches
   // hits the server render and does nothing.
   await expect(async () => {
-    await page.getByRole('button', { name: /^Challenge 21:/ }).click();
+    await page.getByRole('button', { name: /^Challenge 26:/ }).click();
     await expect(page.locator('.briefing-number')).toHaveText('Challenge 01', { timeout: 1000 });
   }).toPass({ timeout: 15_000 });
 });
@@ -121,7 +121,7 @@ test('proving a challenge opens the next one and records the length', async ({ p
 
   await expect(page.getByRole('button', { name: /^Challenge 01:.*Proved in 4 steps/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Challenge 02:.*Not yet proved/ })).toBeVisible();
-  await expect(page.locator('.challenge-entry.is-locked')).toHaveCount(19);
+  await expect(page.locator('.challenge-entry.is-locked')).toHaveCount(24);
 });
 
 test('a challenge briefing frames the work before revealing the workbench', async ({ page }) => {
@@ -141,8 +141,8 @@ test('the law palette groups available moves by what they accomplish', async ({ 
   await beginProof(page);
 
   const palette = page.getByRole('complementary');
-  await expect(palette.getByText('Simplify what is there', { exact: true })).toBeVisible();
-  await expect(palette.getByText('Transform the equation', { exact: true })).toBeVisible();
+  await expect(palette.getByText('Simplification', { exact: true })).toBeVisible();
+  await expect(palette.getByText('Equation transformations', { exact: true })).toBeVisible();
   await expect(page.locator('.selection-note strong')).toHaveText('No law selected');
   await expect(page.locator('.rule-card[aria-pressed="true"]')).toHaveCount(0);
   await expect(targets(page)).toHaveCount(0);
@@ -226,6 +226,21 @@ test('a law earned by proving it says which challenge proved it', async ({ page 
   // And it is named where it was earned, too.
   await page.getByRole('button', { name: 'Menu' }).click();
   await expect(page.locator('.earned-law')).toContainText(['Invert the identity']);
+});
+
+test('the power lesson records definitions without calling them theorems', async ({ page }) => {
+  await proveByHints(page, 'powers');
+
+  await expect(page.locator('.success-defined')).toContainText(
+    'Definition introduced: Write a power out and Combine into a power',
+  );
+  await expect(page.locator('.success-earned')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Course overview' }).click();
+  await expect(page.getByRole('heading', { name: 'Definitions introduced' })).toBeVisible();
+  await expect(page.locator('.earned-law.is-definition').first()).toContainText(
+    'defined in challenge 11',
+  );
 });
 
 /* Hints -------------------------------------------------------------------- */
@@ -337,7 +352,7 @@ test('a completion claimed in storage without a proof buys nothing', async ({ pa
   await page.reload();
 
   await expect(page.locator('.notice')).toContainText('no longer check out');
-  await expect(page.locator('.course-progress')).toContainText(/0\s*of 21/);
+  await expect(page.locator('.course-progress')).toContainText(/0\s*of 26/);
   await expect(page.getByRole('button', { name: /^Challenge 02:.*Locked until/ })).toBeVisible();
 });
 
@@ -351,7 +366,7 @@ test('a real proof relabelled as shorter is refused rather than believed', async
   }, STORAGE_KEY);
   await page.reload();
 
-  await expect(page.locator('.course-progress')).toContainText(/0\s*of 21/);
+  await expect(page.locator('.course-progress')).toContainText(/0\s*of 26/);
 });
 
 test('progress can be cleared, and clearing relocks the course', async ({ page }) => {
@@ -359,12 +374,12 @@ test('progress can be cleared, and clearing relocks the course', async ({ page }
   await page.getByRole('button', { name: 'Menu' }).click();
   await page.getByRole('button', { name: 'Clear progress' }).click();
 
-  await expect(page.locator('.course-progress')).toContainText(/0\s*of 21/);
+  await expect(page.locator('.course-progress')).toContainText(/0\s*of 26/);
   await expect(page.getByRole('button', { name: /^Challenge 02:.*Locked until/ })).toBeVisible();
 
   // And it is gone from the device, not merely from the screen.
   await page.reload();
-  await expect(page.locator('.course-progress')).toContainText(/0\s*of 21/);
+  await expect(page.locator('.course-progress')).toContainText(/0\s*of 26/);
 });
 
 /* Goal shapes -------------------------------------------------------------- */

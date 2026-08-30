@@ -9,12 +9,12 @@
  *
  * Phase 4 adds progression and teaching metadata to each entry.
  *
- * `grants` is the law this challenge earns. Every law in the catalogue is
- * either primitive — an axiom, or the definition of a piece of notation — or
+ * `grants` is a theorem this challenge proves and earns. `introduces` is a
+ * definition the challenge motivates or teaches instead. Every law in the
+ * catalogue is either primitive — an axiom, or one of those definitions — or
  * derived, and a derived law may not appear in any challenge's ruleset until an
- * earlier challenge has proved it. That is checked by test, and it is why the
- * lemmas now come in pairs: one challenge establishes `(a^-1)^-1 = a` from the
- * axioms, and the next is allowed to use it in one step.
+ * earlier challenge has proved it. Tests check both that distinction and the
+ * order in which introduced notation becomes available.
  *
  * `requires` is the challenge that must be finished before this one opens. It
  * is the linear order of the list, written down rather than inferred, so the
@@ -71,6 +71,8 @@ export type Challenge = {
   rules: AnyRuleId[];
   /** Laws this challenge earns for later ones. */
   grants?: AnyRuleId[];
+  /** Definitions this challenge introduces, rather than claiming to prove. */
+  introduces?: AnyRuleId[];
   /** The challenge that unlocks this one. Absent on the first. */
   requires?: string;
   solution: Move[];
@@ -109,9 +111,9 @@ export const COURSE_CHAPTERS: CourseChapter[] = [
   {
     id: 'powers',
     label: 'Chapter 3',
-    title: 'Powers as notation',
-    description: 'Connect exponent notation to repeated products, inverses, and cancellation.',
-    outcome: 'Move fluently between powers and the products they abbreviate.',
+    title: 'Build the power laws',
+    description: 'Separate definitions from the properties they support, then compress the resulting proofs.',
+    outcome: 'Explain zero and negative exponents and justify the rules for inversion and exponent addition.',
   },
   {
     id: 'equations',
@@ -143,11 +145,11 @@ export const FREE_RULES: AnyRuleId[] = ALL_RULE_IDS;
  * Two kinds sit here. The axioms — cancelling and inserting an inverse pair,
  * removing and inserting the identity, and the whole-equation moves — are what
  * the group axioms directly say, and everything else in the app is built out of
- * them. The power laws are the *definition* of the notation `x^n` rather than
- * theorems about it: writing a power out, adding exponents, `x^0 = e`, and the
- * two readings of a negative exponent are all statements about what the
- * shorthand abbreviates. Making a learner derive a definition would teach the
- * wrong thing about where notation comes from.
+ * them. Four power moves are definitions of notation rather than theorems:
+ * writing a positive power out, collecting identical repeated factors,
+ * `x^0 = e`, and reading a negative exponent as an inverse. The exponent laws
+ * themselves are derived later. Making a learner pretend to prove a definition
+ * would teach the wrong thing about where notation comes from.
  *
  * `invert-both-sides` is the one judgement call. It rests on inverses being
  * unique, which is a theorem — but it is a theorem about equations, and this
@@ -161,9 +163,8 @@ export const PRIMITIVE_RULES: AnyRuleId[] = [
   'remove-identity',
   'insert-identity',
   'expand-power',
-  'combine-powers',
+  'combine-repeats',
   'zero-power',
-  'inverse-of-power',
   'negative-power',
   'symmetry',
   'left-multiply',
@@ -382,40 +383,150 @@ export const CHALLENGES: Challenge[] = [
   {
     id: 'powers',
     label: '11',
-    title: 'Powers are shorthand',
+    title: 'Count the copies',
     blurb:
-      'A power abbreviates a repeated product. Add the exponents, or write them out and cancel — both are proofs.',
+      'Positive powers are repeated products by definition. Write both powers out, count the five copies of a, and collect them again. This concrete calculation suggests exponent addition; it does not yet prove the rule for every exponent.',
     chapter: 'powers',
-    objective: 'Interpret powers as compact notation for products and inverses.',
-    prompt: 'Can the adjacent powers be combined before anything is expanded?',
-    takeaway: 'Power laws record what repeated-product notation means; combining exponents can compress several elementary steps.',
-    start: 'a^3 a^-2',
-    goal: 'a',
+    objective: 'Use the definition of a positive power in both directions.',
+    prompt: 'How many copies of a are present after both powers are written out?',
+    takeaway: 'For these concrete exponents, a^3 a^2 and a^5 are two notations for the same five-factor product. The general exponent law still needs justification.',
+    start: 'a^3 a^2',
+    goal: 'a^5',
+    rules: ['expand-power', 'combine-repeats'],
+    introduces: ['expand-power', 'combine-repeats'],
+    requires: 'nested-inverse',
+    solution: [
+      { rule: 'expand-power', at: 1 },
+      { rule: 'expand-power', at: 1 },
+      { rule: 'combine-repeats', at: 4 },
+    ],
+  },
+  {
+    id: 'define-zero-power',
+    label: '12',
+    title: 'What must the zero power mean?',
+    blurb:
+      'If exponent addition is to extend to zero, a^3 a^0 must equal a^3. Solve that requirement for a^0. This determines the only compatible definition; it is not a proof about notation that already had a meaning.',
+    chapter: 'powers',
+    objective: 'Derive the unique value that makes a^m a^0 = a^(m+0) work in a representative case.',
+    prompt: 'What can multiply on the left to remove a^3 from both sides?',
+    takeaway: 'The calculation forces a^0 = e if exponent addition is to include zero. The app showed m = 3; the same cancellation argument works for every positive m.',
+    start: 'a^3 a^0 = a^3',
+    goal: 'a^0 = e',
+    rules: ['left-multiply', 'cancel-inverse', 'remove-identity'],
+    introduces: ['zero-power'],
+    requires: 'powers',
+    solution: [
+      { rule: 'left-multiply', term: '(a^3)^-1' },
+      { rule: 'cancel-inverse', at: 1 },
+      { rule: 'cancel-inverse', at: 1 },
+      { rule: 'remove-identity', at: 1 },
+    ],
+  },
+  {
+    id: 'define-negative-power',
+    label: '13',
+    title: 'What must a negative power mean?',
+    blurb:
+      'To keep exponent addition valid across zero, a^3 a^-3 must equal a^0. Use the zero-power definition, then solve for a^-3. The result determines the meaning of negative exponent notation.',
+    chapter: 'powers',
+    objective: 'Derive the definition a^-n = (a^n)^-1 from the compatibility we demand of exponents.',
+    prompt: 'After replacing a^0 by e, how can you isolate a^-3?',
+    takeaway: 'Compatibility forces a^-3 to mean (a^3)^-1. This example determines the definition at 3; the same argument defines a^-n for every positive n.',
+    start: 'a^3 a^-3 = a^0',
+    goal: 'a^-3 = (a^3)^-1',
+    rules: ['zero-power', 'left-multiply', 'cancel-inverse', 'remove-identity'],
+    introduces: ['negative-power'],
+    requires: 'define-zero-power',
+    solution: [
+      { rule: 'zero-power', at: 1 },
+      { rule: 'left-multiply', term: '(a^3)^-1' },
+      { rule: 'cancel-inverse', at: 1 },
+      { rule: 'remove-identity', at: 1 },
+      { rule: 'remove-identity', at: 1 },
+    ],
+  },
+  {
+    id: 'prove-inverse-of-power',
+    label: '14',
+    title: 'Undo a negative power',
+    blurb:
+      'For positive n, (a^n)^-1 = a^-n is the negative-exponent definition; n = 0 uses e^-1 = e; and negative n reduces by double inverse. This sheet works through n = -3, illustrating that case rather than formalizing a quantified proof over every integer.',
+    chapter: 'powers',
+    objective: 'Derive the negative-exponent case of inverting a power from the definition and double inverse.',
+    prompt: 'What does a^-3 mean before the outer inverse is simplified?',
+    takeaway: 'For n = -3, inverting a^n negates the exponent. In general: positive n is the negative-exponent definition, n = 0 uses e^-1 = e, and negative n uses double inverse.',
+    start: '(a^-3)^-1',
+    goal: 'a^3',
+    rules: ['negative-power', 'double-inverse'],
+    grants: ['inverse-of-power'],
+    requires: 'define-negative-power',
+    solution: [{ rule: 'negative-power', at: 1 }, { rule: 'double-inverse', at: 1 }],
+  },
+  {
+    id: 'prove-add-exponents',
+    label: '15',
+    title: 'Add across zero',
+    blurb:
+      'Work out a^3 a^-5 from the definitions and previously proved inverse laws. The long route reaches a^-2 and motivates the general shortcut. It is a representative integer calculation, not an induction proof for every m and n.',
+    chapter: 'powers',
+    objective: 'Justify exponent addition in a mixed-sign example without using the exponent-addition rule itself.',
+    prompt: 'How can the negative power be exposed as an inverse of a positive product?',
+    takeaway: 'This calculation confirms 3 + (-5) = -2 from the definitions. The general law follows by the same product-and-cancellation analysis, but that quantified proof is described rather than formalized here.',
+    start: 'a^3 a^-5',
+    goal: 'a^-2',
     rules: [
-      'combine-powers',
       'expand-power',
+      'negative-power',
+      'inverse-of-product',
       'cancel-inverse',
       'remove-identity',
-      'zero-power',
-      'negative-power',
+      'combine-inverses',
+      'combine-repeats',
       'inverse-of-power',
     ],
-    requires: 'nested-inverse',
-    solution: [{ rule: 'combine-powers', at: 1 }],
+    grants: ['combine-powers'],
+    requires: 'prove-inverse-of-power',
+    solution: [
+      { rule: 'negative-power', at: 1 },
+      { rule: 'expand-power', at: 2 },
+      { rule: 'combine-repeats', at: 1 },
+      { rule: 'combine-repeats', at: 2 },
+      { rule: 'inverse-of-product', at: 1 },
+      { rule: 'cancel-inverse', at: 1 },
+      { rule: 'remove-identity', at: 1 },
+      { rule: 'inverse-of-power', at: 1 },
+    ],
+  },
+  {
+    id: 'power-zero-check',
+    label: '16',
+    title: 'Check the zero case',
+    blurb:
+      'Use the newly earned exponent-addition shortcut when opposite exponents meet. The zero-power definition should make its result agree with inverse cancellation.',
+    chapter: 'powers',
+    objective: 'Check that exponent addition and the zero-power definition agree at a cancellation boundary.',
+    prompt: 'What exponent results when 4 and -4 are added?',
+    takeaway: 'Adding opposite exponents produces a^0, and the zero-power definition turns that into the identity as cancellation requires.',
+    start: 'a^4 a^-4',
+    goal: 'e',
+    rules: ['combine-powers', 'zero-power'],
+    requires: 'prove-add-exponents',
+    solution: [{ rule: 'combine-powers', at: 1 }, { rule: 'zero-power', at: 1 }],
   },
   {
     id: 'power-workout',
-    label: '12',
+    label: '17',
     title: 'Power workout',
     blurb: 'One exponent calculation exposes an inverse pair. Finish the cleanup without expanding the powers.',
     chapter: 'powers',
     objective: 'Combine power notation with inverse and identity cleanup.',
     prompt: 'What is the exponent left after the first two factors combine?',
-    takeaway: 'Power notation and the inverse law describe the same group structure at different levels of compression.',
+    takeaway: 'Earned power properties and the inverse law describe the same group structure at different levels of compression.',
     start: 'a^2 a^-3 b^-1 b',
     goal: 'a^-1',
     rules: ['combine-powers', 'cancel-inverse', 'remove-identity'],
-    requires: 'powers',
+    requires: 'power-zero-check',
     solution: [
       { rule: 'combine-powers', at: 1 },
       { rule: 'cancel-inverse', at: 1 },
@@ -434,7 +545,7 @@ export const CHALLENGES: Challenge[] = [
    */
   {
     id: 'solve-left',
-    label: '13',
+    label: '18',
     title: 'Solve for x',
     blurb:
       'x is trapped behind an a. Multiplying both sides by the same term keeps the equation true — choose the term that clears it.',
@@ -454,7 +565,7 @@ export const CHALLENGES: Challenge[] = [
   },
   {
     id: 'solve-right',
-    label: '14',
+    label: '19',
     title: 'The other side',
     blurb:
       'The same problem with the a on the right. The group is not assumed commutative, so the side you multiply on matters.',
@@ -474,7 +585,7 @@ export const CHALLENGES: Challenge[] = [
   },
   {
     id: 'read-it-backwards',
-    label: '15',
+    label: '20',
     title: 'Read it the other way',
     blurb:
       'An equation says the same thing in either direction — but saying it the other way round is still a step.',
@@ -495,7 +606,7 @@ export const CHALLENGES: Challenge[] = [
   },
   {
     id: 'inverses-of-equals',
-    label: '16',
+    label: '21',
     title: 'Inverses of equals',
     blurb:
       'Equal terms have equal inverses. Invert both sides, then remember what inverting a product does to the order.',
@@ -511,7 +622,7 @@ export const CHALLENGES: Challenge[] = [
   },
   {
     id: 'cancellation',
-    label: '17',
+    label: '22',
     title: 'Prove: cancel a common factor',
     blurb:
       'If a x and a y are equal, then x and y are. That is the cancellation law, and it is a theorem rather than an axiom — so here it is proved, from multiplying both sides.',
@@ -534,7 +645,7 @@ export const CHALLENGES: Challenge[] = [
   },
   {
     id: 'use-cancellation',
-    label: '18',
+    label: '23',
     title: 'Cancel from both ends',
     blurb:
       'Cancellation is yours now, and it comes in two directions. Nothing here needs the long way round any more.',
@@ -550,7 +661,7 @@ export const CHALLENGES: Challenge[] = [
   },
   {
     id: 'mixed-inverses',
-    label: '19',
+    label: '24',
     title: 'Inverse fluency',
     blurb: 'Several inverse ideas are nested together. Choose the order that exposes the simplest next move.',
     chapter: 'fluency',
@@ -568,7 +679,7 @@ export const CHALLENGES: Challenge[] = [
   },
   {
     id: 'solve-both-ends',
-    label: '20',
+    label: '25',
     title: 'Free x from both ends',
     blurb: 'x has a factor on each side. Remove them in an order that preserves every factor you still need.',
     chapter: 'fluency',
@@ -590,7 +701,7 @@ export const CHALLENGES: Challenge[] = [
   },
   {
     id: 'solve-where-it-stands',
-    label: '21',
+    label: '26',
     title: 'Solve it where it stands',
     blurb: 'This time x begins on the right side of the equation. Leave it there and still solve efficiently.',
     chapter: 'fluency',
@@ -624,6 +735,11 @@ export function challengeIndex(id: string): number {
 /** The challenge that earned this law, if any law did. */
 export function grantedBy(rule: AnyRuleId): Challenge | undefined {
   return CHALLENGES.find((challenge) => challenge.grants?.includes(rule));
+}
+
+/** The challenge that taught a notation definition, if one did. */
+export function introducedBy(rule: AnyRuleId): Challenge | undefined {
+  return CHALLENGES.find((challenge) => challenge.introduces?.includes(rule));
 }
 
 export function isPrimitiveRule(rule: AnyRuleId): boolean {

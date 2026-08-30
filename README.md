@@ -69,7 +69,7 @@ Solving for x is now a goal *shape* — x by itself on a named side, and gone fr
 the other — so any route that solves the equation finishes it. Exact goals are
 unchanged, and still orientation sensitive.
 
-Hints come in three grades, from the family of laws to look in, through the law
+Hints come in three grades, from the palette category to look in, through the law
 and where it applies, to the move itself offered as a control. They walk a
 reference proof that ships with each challenge and is machine-checked against
 exactly that challenge's tools. There is no proof search, so a learner who has
@@ -83,11 +83,15 @@ the interface uses, and drops anything that does not check out, including a real
 proof relabelled with a shorter step count. A completion can be claimed in
 storage, but it cannot be bought there.
 
-The twenty-one challenges are grouped into five named chapters, each with a
+The twenty-six challenges are grouped into five named chapters, each with a
 learning outcome. The inverse chapter now proves separately that a right inverse
 and a left inverse must equal the named inverse before using uniqueness to
-identify the inverse of the identity. Later practice reinforces powers, mixed
-inverses, and solving equations with factors on both ends. Every challenge opens
+identify the inverse of the identity. The power chapter now separates definitions
+from theorems: learners write and collect repeated products, motivate the zero and
+negative exponent definitions, and only then earn exponent laws through worked
+arguments that say plainly where a representative calculation is not a general
+proof. Later practice reinforces mixed inverses and solving equations with factors
+on both ends. Every challenge opens
 with a focused briefing and closes with a takeaway and a clear next step. The
 briefing presents the starting point, target, and prediction prompt before the
 proof controls appear. Once work begins, the goal stays compact and the laws are

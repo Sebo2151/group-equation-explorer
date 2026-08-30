@@ -264,10 +264,10 @@ test.describe('narrow viewport', () => {
 
 const CHALLENGE_LABEL: Record<string, string> = {
   'cancel-pairs': '01',
-  'solve-left': '13',
-  'solve-right': '14',
-  'inverses-of-equals': '16',
-  cancellation: '17',
+  'solve-left': '18',
+  'solve-right': '19',
+  'inverses-of-equals': '21',
+  cancellation: '22',
 };
 
 /**

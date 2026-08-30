@@ -9,6 +9,7 @@ import {
   FREE_RULES,
   freeSetup,
   grantedBy,
+  introducedBy,
   isPrimitiveRule,
   resolveMove,
   type Challenge,
@@ -176,6 +177,8 @@ test('every challenge names only rules that exist', () => {
   for (const challenge of CHALLENGES) {
     assert.ok(challenge.rules.length > 0, `${challenge.id} permits nothing`);
     for (const rule of challenge.rules) assert.doesNotThrow(() => anyRuleById(rule));
+    for (const rule of challenge.grants ?? []) assert.doesNotThrow(() => anyRuleById(rule));
+    for (const rule of challenge.introduces ?? []) assert.doesNotThrow(() => anyRuleById(rule));
   }
 });
 
@@ -268,6 +271,26 @@ test('every derived law is earned somewhere, and every primitive law is not', ()
       isPrimitiveRule(rule),
       `${rule} is ${isPrimitiveRule(rule) ? 'primitive but earned' : 'derived but never earned'}`,
     );
+  }
+});
+
+test('notation definitions are introduced once and never used early', () => {
+  const introduced = new Set<AnyRuleId>();
+
+  for (const challenge of CHALLENGES) {
+    for (const rule of challenge.rules) {
+      const lesson = introducedBy(rule);
+      if (lesson && lesson.id !== challenge.id) {
+        assert.ok(introduced.has(rule), `${challenge.id} uses ${rule} before it is introduced`);
+      }
+    }
+
+    for (const rule of challenge.introduces ?? []) {
+      assert.ok(isPrimitiveRule(rule), `${challenge.id} introduces derived theorem ${rule}`);
+      assert.equal(grantedBy(rule), undefined, `${rule} is both defined and proved`);
+      assert.ok(!introduced.has(rule), `${rule} is introduced more than once`);
+      introduced.add(rule);
+    }
   }
 });
 

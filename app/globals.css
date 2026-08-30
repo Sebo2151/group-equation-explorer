@@ -562,8 +562,11 @@ h2 { margin-bottom: 0; font-size: 1.05rem; letter-spacing: -0.015em; }
 .earned-law strong { color: var(--ink); font-size: 0.85rem; }
 .earned-law span { color: var(--green); font-size: 0.77rem; }
 
-.success-score, .success-earned, .success-takeaway { display: block; margin-top: 5px; font-size: 0.8rem; }
+.success-score, .success-earned, .success-defined, .success-takeaway { display: block; margin-top: 5px; font-size: 0.8rem; }
 .success-earned { color: var(--gold); font-weight: 700; }
+.success-defined { color: var(--blue-deep); font-weight: 700; }
+.progress-subheading { margin: 18px 0 8px; font-size: 0.86rem; color: var(--muted); letter-spacing: 0.01em; }
+.earned-law.is-definition span { color: var(--blue-deep); }
 .success-takeaway { max-width: 40rem; line-height: 1.45; }
 .success-actions { display: flex !important; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
 .success-actions .tool-button { min-height: 34px; font-size: 0.75rem; }

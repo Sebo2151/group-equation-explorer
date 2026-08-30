@@ -12,7 +12,7 @@
  * exactly the challenge's own tools. They come in three grades, and the learner
  * asks for each one:
  *
- *   1. the family to look in — enough to start thinking, not enough to act;
+ *   1. the palette category to look in — enough to start thinking, not enough to act;
  *   2. the law, and where on the line it applies;
  *   3. the move itself, offered as a control, so nobody is stuck.
  *
@@ -31,17 +31,11 @@ import {
   type Move,
 } from './challenges.ts';
 import { anyRuleById, findAddresses } from './catalogue.ts';
+import { purposeFor } from './law-purposes.ts';
 import { applyRule, createProof, currentLine, isComplete, type ProofState } from './proof.ts';
 import { type RuleArgument } from './rules.ts';
 import { subjectsEqual, type Address, type Subject } from './subject.ts';
 import { spanSpeech, spanTerms, type Term } from './term.ts';
-
-const FAMILY_PROSE: Record<string, string> = {
-  identity: 'the identity laws',
-  inverse: 'the inverse laws',
-  power: 'the power laws',
-  equation: 'the laws that act on the whole equation',
-};
 
 /** The reference proof, line by line, so a learner's line can be located on it. */
 export function referenceLines(challenge: Challenge): ProofState | null {
@@ -123,7 +117,7 @@ export function hintFor(state: ProofState, level: number): Hint {
     return {
       kind: 'step',
       level: 1,
-      text: `Look among ${FAMILY_PROSE[rule.family] ?? 'the laws you have'}.`,
+      text: `Look in ${purposeFor(rule.id).label}.`,
       more: true,
     };
   }

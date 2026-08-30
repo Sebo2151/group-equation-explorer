@@ -36,7 +36,7 @@ export const PROGRESS_VERSION = 1;
 
 /**
  * Bounds the work a stored file can cause before any of it is replayed. There
- * there are twenty-one challenges; anything claiming far more is not ours.
+ * there are twenty-six challenges; anything claiming far more is not ours.
  */
 const MAX_ENTRIES = 100;
 
@@ -229,6 +229,13 @@ export function requiredChallenge(progress: Progress, id: string): Challenge | u
 export function earnedRules(progress: Progress): AnyRuleId[] {
   return CHALLENGES.filter((challenge) => isChallengeComplete(progress, challenge.id)).flatMap(
     (challenge) => challenge.grants ?? [],
+  );
+}
+
+/** Every notation definition introduced so far, in curriculum order. */
+export function introducedRules(progress: Progress): AnyRuleId[] {
+  return CHALLENGES.filter((challenge) => isChallengeComplete(progress, challenge.id)).flatMap(
+    (challenge) => challenge.introduces ?? [],
   );
 }
 

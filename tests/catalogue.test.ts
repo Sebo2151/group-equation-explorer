@@ -254,6 +254,7 @@ test('every term rule that applies to a term also applies to that term as a side
     'combine-inverses': 'b^-1 a^-1',
     'inverse-of-identity': 'e^-1',
     'expand-power': 'a^3',
+    'combine-repeats': 'a a a',
     'combine-powers': 'a^2 a^3',
     'zero-power': 'a^0',
     'inverse-of-power': '(a^2)^-1',

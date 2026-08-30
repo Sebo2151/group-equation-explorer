@@ -51,7 +51,7 @@ test('the app opens on the menu, not in a proof', async ({ page }) => {
 test('the menu lists every challenge and can start the first', async ({ page }) => {
   await page.goto('/');
   const entries = page.locator('.challenge-entry');
-  await expect(entries).toHaveCount(21);
+  await expect(entries).toHaveCount(26);
 
   await openChallenge(page, '01');
   await expect(page.locator('#briefing-title')).toHaveText('Cancel what undoes itself');

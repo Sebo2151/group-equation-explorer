@@ -14,6 +14,7 @@ import {
   FREE_CHALLENGE_ID,
   freeSetup,
   grantedBy,
+  introducedBy,
   type Challenge,
 } from './challenges.ts';
 import { MAX_HINT_LEVEL, hintFor, referenceLines, rejoinDepth, type Hint } from './hints.ts';
@@ -30,6 +31,7 @@ import {
   completedCount,
   earnedRules,
   emptyProgress,
+  introducedRules,
   isChallengeComplete,
   isUnlocked,
   nextChallenge,
@@ -622,6 +624,7 @@ export default function Home() {
     [challenge, routeOpen],
   );
   const earned = useMemo(() => new Set(earnedRules(progress)), [progress]);
+  const introduced = useMemo(() => new Set(introducedRules(progress)), [progress]);
 
   /**
    * Every place the selected law applies on this line, in reading order. The
@@ -1331,15 +1334,24 @@ export default function Home() {
                         {scoreLine(challenge, stepCount(proof), bestFor(progress, challenge.id)?.steps)}
                       </span>
                     )}
-                    {/* Said once, here, where it was earned — rather than only
-                        appearing silently in the law list next time. */}
+                    {/* The distinction is mathematical, not cosmetic: a
+                        theorem was proved, while notation received a
+                        definition chosen to make the surrounding laws work. */}
                     {challenge?.grants?.length ? (
                       <span className="success-earned">
-                        Earned:{' '}
+                        Theorem proved:{' '}
                         {challenge.grants.map((granted) => anyRuleById(granted).name).join(' and ')}.
                         {' '}
                         {challenge.grants.length === 1 ? 'It is' : 'They are'} yours to use from here
                         on.
+                      </span>
+                    ) : null}
+                    {challenge?.introduces?.length ? (
+                      <span className="success-defined">
+                        Definition introduced:{' '}
+                        {challenge.introduces
+                          .map((introducedRule) => anyRuleById(introducedRule).name)
+                          .join(' and ')}.
                       </span>
                     ) : null}
                     {challenge && (
@@ -1471,8 +1483,13 @@ export default function Home() {
                     // Where a derived law came from, so it never reads as
                     // something that was simply always true by decree.
                     const from = grantedBy(entry.id);
+                    const definition = introducedBy(entry.id);
                     const provenance =
-                      from && earned.has(entry.id) ? `proved in challenge ${from.label}` : null;
+                      from && earned.has(entry.id)
+                        ? `proved in challenge ${from.label}`
+                        : definition && introduced.has(entry.id)
+                          ? `defined in challenge ${definition.label}`
+                          : null;
                     return (
                       <button
                         aria-label={`${entry.name}, ${describeReach(entry, count)}${
@@ -1633,6 +1650,7 @@ function MenuScreen({
   const done = completedCount(progress);
   const next = nextChallenge(progress);
   const laws = earnedRules(progress);
+  const definitions = introducedRules(progress);
   const percent = Math.round((done / CHALLENGES.length) * 100);
   const activeChapter = COURSE_CHAPTERS.find((chapter) => chapter.id === next?.chapter);
 
@@ -1803,7 +1821,7 @@ function MenuScreen({
         <div className="section-heading">
           <div>
             <p className="eyebrow">This device</p>
-            <h2 id="progress-heading">What you have earned</h2>
+            <h2 id="progress-heading">What you have established</h2>
           </div>
         </div>
         <p className="menu-lead">
@@ -1811,22 +1829,42 @@ function MenuScreen({
           other devices. What is stored is the proofs themselves, so every one of them is checked
           again each time the app opens.
         </p>
-        {laws.length > 0 ? (
-          <ul className="earned-list">
-            {laws.map((law) => {
-              const from = grantedBy(law);
-              return (
-                <li className="earned-law" key={law}>
-                  <strong>{anyRuleById(law).name}</strong>
-                  <span>{from ? `proved in challenge ${from.label}` : 'earned'}</span>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
+        {laws.length === 0 && definitions.length === 0 ? (
           <p className="menu-lead">
-              No laws earned yet. The first is the identity inverting to itself, in challenge 05.
+            No laws earned yet. The first is the identity inverting to itself, in challenge 05.
           </p>
+        ) : null}
+        {definitions.length > 0 && (
+          <>
+            <h3 className="progress-subheading">Definitions introduced</h3>
+            <ul className="earned-list">
+              {definitions.map((law) => {
+                const from = introducedBy(law);
+                return (
+                  <li className="earned-law is-definition" key={law}>
+                    <strong>{anyRuleById(law).name}</strong>
+                    <span>{from ? `defined in challenge ${from.label}` : 'introduced'}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+        {laws.length > 0 && (
+          <>
+            <h3 className="progress-subheading">Theorems proved</h3>
+            <ul className="earned-list">
+              {laws.map((law) => {
+                const from = grantedBy(law);
+                return (
+                  <li className="earned-law" key={law}>
+                    <strong>{anyRuleById(law).name}</strong>
+                    <span>{from ? `proved in challenge ${from.label}` : 'proved'}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
         )}
         {storageFailed && (
           <p className="notice is-error" role="status">

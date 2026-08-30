@@ -314,10 +314,11 @@ constraint checked by test rather than by review. Cancellation became an earned
 law, which Phase 3 had anticipated. Goals may be a shape as well as an exact
 line, which is how alternative proofs receive credit.
 
-A subsequent refinement expanded the course to twenty-one challenges in five
+A subsequent refinement expanded the course to twenty-six challenges in five
 chapters. The inverse chapter now proves the uniqueness of right and left
 inverses before deriving the inverse of the identity. The later work adds
-deliberate practice with powers and mixed inverses, then transfer problems that
+an extended power sequence that distinguishes notation definitions from proved
+properties, deliberate practice with mixed inverses, then transfer problems that
 isolate a variable with factors on both ends and with the equation written in
 the less familiar orientation. Chapter outcomes, thinking prompts, post-proof
 takeaways, and a next-challenge action make the instructional sequence visible
