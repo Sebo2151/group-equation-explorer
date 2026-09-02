@@ -18,6 +18,7 @@ import {
   type Challenge,
 } from './challenges.ts';
 import { MAX_HINT_LEVEL, hintFor, referenceLines, rejoinDepth, type Hint } from './hints.ts';
+import { arrivalFragment } from './arrival.ts';
 import {
   MENU,
   isProofDestination,
@@ -747,8 +748,16 @@ export default function Home() {
    */
   useEffect(() => {
     const go = () => {
-      const target = parseLocation(window.location.hash);
+      const fragment = arrivalFragment();
+      const target = parseLocation(fragment);
       setDestination(target);
+
+      // An arrival the router overwrote leaves the address bar disagreeing with
+      // the screen, which would make Share copy the wrong link and the back
+      // button leave from the wrong place. Put it back.
+      if (window.location.hash !== fragment) {
+        window.history.replaceState(null, '', locationHash(target));
+      }
 
       const current = proofRef.current;
 
