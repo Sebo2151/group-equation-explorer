@@ -10,20 +10,18 @@
  * by then `window.location.hash` reports the restored value and the arrival is
  * lost.
  *
- * This module is evaluated when the client bundle loads, which is before
- * hydration, so its listener sees the change the router is about to discard.
- * It records; it decides nothing. `navigation.ts` stays a pure translation with
- * no `window` in it, and this is the one place that watches the address bar.
+ * The small beforeInteractive script in `layout.tsx` runs before the router and
+ * records every real hashchange. This module reads that record; it decides
+ * nothing. `navigation.ts` stays a pure translation with no `window` in it.
  */
 
-/** The last fragment the browser reported, kept across the router's restore. */
-let observed: string | null = null;
-
-if (typeof window !== 'undefined') {
-  observed = window.location.hash;
-  window.addEventListener('hashchange', () => {
-    observed = window.location.hash;
-  });
+declare global {
+  interface Window {
+    /** The last fragment observed before any silent router replacement. */
+    __groupEquationExplorerArrival?: string;
+    /** Whether React has consumed the initial fragment. */
+    __groupEquationExplorerArrivalReady?: boolean;
+  }
 }
 
 /**
@@ -37,12 +35,7 @@ if (typeof window !== 'undefined') {
  */
 export function arrivalFragment(): string {
   if (typeof window === 'undefined') return '';
-
-  const live = window.location.hash;
-  if (live) {
-    observed = live;
-    return live;
-  }
-
-  return observed ?? '';
+  const fragment = window.__groupEquationExplorerArrival ?? window.location.hash;
+  window.__groupEquationExplorerArrivalReady = true;
+  return fragment;
 }

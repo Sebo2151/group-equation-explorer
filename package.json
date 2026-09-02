@@ -8,14 +8,16 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "npx serve out",
+    "postbuild": "node scripts/finalize-export.mjs",
+    "start": "node --experimental-strip-types tests/support/serve-pages.ts",
     "lint": "eslint . --ignore-pattern out --ignore-pattern .next --ignore-pattern work",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "test:pages": "playwright test --config=playwright.pages.config.ts"
   },
   "dependencies": {
     "katex": "^0.16.22",
-    "next": "16.2.6",
+    "next": "16.3.4",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   },
@@ -26,7 +28,7 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.3.4",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3"
   },

@@ -151,6 +151,7 @@ npm test
 npm run lint
 npm run build
 npm run test:browser
+npm run test:pages
 ```
 
 Soundness of the rules is checked by evaluation as well as by structure. Every
@@ -161,11 +162,16 @@ would fail there immediately. Note what this cannot see: left and right
 multiplication are *both* sound, so only the shape of the result distinguishes
 them, and that is asserted separately.
 
-`npm run test:browser` runs the Playwright suites in `tests/browser`, against a
-desktop viewport and a genuine 390px phone profile. It asserts behavioural
+`npm run test:browser` runs the Playwright suites in `tests/browser` against the
+completed static export, at a desktop viewport and a genuine 390px phone
+profile. It asserts behavioural
 invariants — focus destinations, dock-versus-active-line geometry, one control
 per candidate, no TeX in accessible names — rather than appearance, so it
 should survive a redesign. First run needs `npx playwright install chromium`.
+
+`npm run test:pages` serves the completed export at the real GitHub Pages
+project path and checks that it hydrates without missing assets or browser
+errors. Run it after `npm run build`.
 
 `npm run build` typechecks as part of building, which is why no separate `tsc`
 step is listed.

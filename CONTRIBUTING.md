@@ -36,6 +36,7 @@ npm test
 npm run lint
 npm run build
 npm run test:browser
+npm run test:pages
 ```
 
 The browser suite needs `npx playwright install chromium` on its first run, and

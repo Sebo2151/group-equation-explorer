@@ -9,11 +9,14 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './tests/browser',
+  // The production export has its own config and server at the Pages subpath.
+  testIgnore: 'pages.spec.ts',
+  globalSetup: './tests/support/pages-global-setup.ts',
   fullyParallel: false,
   workers: 1,
   reporter: process.env.CI ? 'line' : 'list',
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: 'http://127.0.0.1:3000',
     trace: 'retain-on-failure',
   },
   projects: [
@@ -22,15 +25,4 @@ export default defineConfig({
     // override had silently reported 325px, so the width is asserted in-test.
     { name: 'phone', use: { ...devices['Pixel 7'], viewport: { width: 390, height: 844 } } },
   ],
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:3000',
-    // Reusing a running dev server is convenient, but it will happily serve
-    // stale CSS after a custom-property change, which reads as a layout bug in
-    // these tests. If a geometry assertion fails inexplicably, restart the
-    // server before believing it.
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-    stdout: 'ignore',
-  },
 });
