@@ -1,0 +1,83 @@
+# Builds the static export and publishes it to GitHub Pages.
+#
+# Enable this once, under Settings -> Pages -> Source -> GitHub Actions. The
+# artifact deployment path does not run Jekyll, but `.nojekyll` is written all
+# the same: if the site is ever served straight from a branch instead, Jekyll
+# would silently drop the `_next` directory that every asset lives in, and the
+# failure looks like a blank page rather than an error.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Configure GitHub Pages
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/configure-pages@v5
+
+      - run: npm ci
+      # The deployed app has no server, but vulnerable dependencies still ship
+      # to browsers or execute while building the artifact.
+      - run: npm audit --audit-level=high
+
+      - run: npm run lint
+      - run: npm test
+
+      # `next build` runs TypeScript itself, and it regenerates the gitignored
+      # `next-env.d.ts` that a standalone `tsc` would need, so it comes before
+      # any further checking rather than after.
+      - run: npm run build
+      - run: touch out/.nojekyll
+
+      # The browser suite is the one that knows whether a learner can still work
+      # a proof, so it gates the deployment rather than merely reporting on it.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      # Exercise the files that will actually be uploaded, at the repository
+      # subpath Pages will serve them from. The main suite above cannot
+      # catch a missing base path or a broken static export.
+      - run: npm run test:pages
+
+      - uses: actions/upload-pages-artifact@v4
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        with:
+          path: out
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Let a running deployment finish rather than cancelling it mid-publish.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

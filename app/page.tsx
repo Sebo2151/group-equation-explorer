@@ -18,6 +18,7 @@ import {
   type Challenge,
 } from './challenges.ts';
 import { MAX_HINT_LEVEL, hintFor, referenceLines, rejoinDepth, type Hint } from './hints.ts';
+import { arrivalFragment } from './arrival.ts';
 import {
   MENU,
   isProofDestination,
@@ -747,8 +748,16 @@ export default function Home() {
    */
   useEffect(() => {
     const go = () => {
-      const target = parseLocation(window.location.hash);
+      const fragment = arrivalFragment();
+      const target = parseLocation(fragment);
       setDestination(target);
+
+      // An arrival the router overwrote leaves the address bar disagreeing with
+      // the screen, which would make Share copy the wrong link and the back
+      // button leave from the wrong place. Put it back.
+      if (window.location.hash !== fragment) {
+        window.history.replaceState(null, '', locationHash(target));
+      }
 
       const current = proofRef.current;
 
@@ -791,7 +800,15 @@ export default function Home() {
       if (target.view === 'challenge') {
         if (current?.challenge === target.id) return;
         const found = challengeById(target.id);
-        if (!found) return;
+        if (!found) {
+          // A fragment naming a challenge that does not exist — mistyped, or
+          // saved from a course that has since been renumbered — must not
+          // leave whatever proof happened to be loaded sitting there under a
+          // heading it does not belong to. As with a link that will not open,
+          // the menu is somewhere to go from.
+          setDestination(MENU);
+          return;
+        }
         setBriefingOpen(true);
 
         /*
