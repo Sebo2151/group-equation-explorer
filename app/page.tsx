@@ -800,7 +800,15 @@ export default function Home() {
       if (target.view === 'challenge') {
         if (current?.challenge === target.id) return;
         const found = challengeById(target.id);
-        if (!found) return;
+        if (!found) {
+          // A fragment naming a challenge that does not exist — mistyped, or
+          // saved from a course that has since been renumbered — must not
+          // leave whatever proof happened to be loaded sitting there under a
+          // heading it does not belong to. As with a link that will not open,
+          // the menu is somewhere to go from.
+          setDestination(MENU);
+          return;
+        }
         setBriefingOpen(true);
 
         /*
